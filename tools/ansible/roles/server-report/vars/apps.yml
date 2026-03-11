@@ -1,34 +1,5 @@
 # Application definitions for detection and health checking
 app_definitions:
-  edgelake:
-    display_name: EdgeLake
-    detection:
-      docker_patterns:
-        - "edgelake-"
-        - "anylogco/edgelake"
-      ports:
-        - 32048  # master TCP
-        - 32049  # master REST
-        - 32148  # operator TCP
-        - 32149  # operator REST
-        - 32248  # operator2 TCP
-        - 32249  # operator2 REST
-        - 32348  # query TCP
-        - 32349  # query REST
-    health_checks:
-      - name: master-rest
-        port: 32049
-        path: /
-      - name: query-rest
-        port: 32349
-        path: /
-      - name: operator-rest
-        port: 32149
-        path: /
-      - name: operator2-rest
-        port: 32249
-        path: /
-
   dashboard:
     display_name: Dashboard
     detection:
@@ -46,28 +17,6 @@ app_definitions:
       - name: api
         port: 3001
         path: /health
-
-  open_horizon:
-    display_name: Open Horizon
-    detection:
-      docker_patterns:
-        - "exchange-api"
-        - "agbot"
-        - "css-api"
-        - "keycloak"
-        - "oh-mongo"
-        - "oh-postgres"
-        - "fdo-owner"
-      systemd_services:
-        - horizon
-      ports:
-        - 3090   # exchange
-        - 9443   # CSS
-        - 8180   # keycloak
-    health_checks:
-      - name: exchange
-        port: 3090
-        path: /v1/admin/version
 
   tsstore:
     display_name: ts-store
@@ -106,24 +55,3 @@ app_definitions:
       ports:
         - 1883
         - 9001
-
-  k3s:
-    display_name: Kubernetes (k3s)
-    detection:
-      systemd_services:
-        - k3s
-      ports:
-        - 6443
-
-  docker_registry:
-    display_name: Docker Registry
-    detection:
-      docker_patterns:
-        - "docker-registry"
-        - "registry:2"
-      ports:
-        - 5000
-    health_checks:
-      - name: registry
-        port: 5000
-        path: /v2/

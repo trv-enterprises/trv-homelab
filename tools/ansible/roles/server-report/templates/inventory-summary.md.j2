@@ -19,34 +19,6 @@
 
 ---
 
-## EdgeLake Network
-
-| Host | Node Type | Ports | Status | Health |
-|------|-----------|-------|--------|--------|
-{% for host in groups['all'] %}
-{% if hostvars[host].app_inventory is defined %}
-{% for app in hostvars[host].app_inventory.edgelake | default([]) %}
-| {{ host }} | {{ app.name }} | {{ app.ports | default('N/A') }} | {{ app.status }} | {{ hostvars[host].health_results['edgelake_' ~ app.name.split('-')[1]] | default('N/A') }} |
-{% endfor %}
-{% endif %}
-{% endfor %}
-
----
-
-## Open Horizon
-
-| Host | Component | Type | Status |
-|------|-----------|------|--------|
-{% for host in groups['all'] %}
-{% if hostvars[host].app_inventory is defined %}
-{% for app in hostvars[host].app_inventory.open_horizon | default([]) %}
-| {{ host }} | {{ app.name }} | {{ app.type }} | {{ app.status }} |
-{% endfor %}
-{% endif %}
-{% endfor %}
-
----
-
 ## ts-store Instances
 
 | Host | Deployment | Status | Health |
@@ -75,9 +47,7 @@
 
 ---
 
-## Other Services
-
-### Mosquitto MQTT
+## Mosquitto MQTT
 
 | Host | Type | Port | Status |
 |------|------|------|--------|
@@ -85,30 +55,6 @@
 {% if hostvars[host].app_inventory is defined %}
 {% for app in hostvars[host].app_inventory.mosquitto | default([]) %}
 | {{ host }} | {{ app.type }} | {{ app.ports | default(app.port | default('1883')) }} | {{ app.status }} |
-{% endfor %}
-{% endif %}
-{% endfor %}
-
-### Kubernetes (k3s)
-
-| Host | Port | Status |
-|------|------|--------|
-{% for host in groups['all'] %}
-{% if hostvars[host].app_inventory is defined %}
-{% for app in hostvars[host].app_inventory.k3s | default([]) %}
-| {{ host }} | {{ app.port }} | {{ app.status }} |
-{% endfor %}
-{% endif %}
-{% endfor %}
-
-### Docker Registry
-
-| Host | Status | Health |
-|------|--------|--------|
-{% for host in groups['all'] %}
-{% if hostvars[host].app_inventory is defined %}
-{% for app in hostvars[host].app_inventory.docker_registry | default([]) %}
-| {{ host }} | {{ app.status }} | {{ hostvars[host].health_results.docker_registry | default('N/A') }} |
 {% endfor %}
 {% endif %}
 {% endfor %}

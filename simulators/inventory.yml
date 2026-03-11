@@ -1,8 +1,0 @@
-all:
-  hosts:
-    trv-srv-001:
-      ansible_host: <hub-tailscale-ip>
-      ansible_user: <user>
-      lxd_container: simulators
-      container_ip: <simulator-tailscale-ip>
-      simulators_path: /root/simulators

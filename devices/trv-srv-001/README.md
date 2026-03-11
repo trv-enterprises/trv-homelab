@@ -1,6 +1,6 @@
 # trv-srv-001 Device Config
 
-Device-specific configs for trv-srv-001. Hub-level services (EdgeLake master/query, Open Horizon) are managed in [`hub/`](../../hub/).
+Device-specific configs for trv-srv-001.
 
 This directory covers the **ts-store and system-stats** services running on trv-srv-001.
 

@@ -1,7 +1,0 @@
-{
-  "properties": [
-    {"name": "purpose", "value": "edgelake"},
-    {"name": "openhorizon.allowPrivileged", "value": true}
-  ],
-  "constraints": []
-}

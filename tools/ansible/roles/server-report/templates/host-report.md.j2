@@ -61,26 +61,6 @@
 {% endfor %}
 {% endif %}
 
-{% if app_inventory.edgelake | length > 0 %}
-### EdgeLake
-
-| Component | Type | Status | Health |
-|-----------|------|--------|--------|
-{% for app in app_inventory.edgelake %}
-| {{ app.name }} | {{ app.type }} | {{ app.status }} | {{ health_results['edgelake_' ~ app.name.split('-')[1]] | default('N/A') }} |
-{% endfor %}
-{% endif %}
-
-{% if app_inventory.open_horizon | length > 0 %}
-### Open Horizon
-
-| Component | Type | Status | Health |
-|-----------|------|--------|--------|
-{% for app in app_inventory.open_horizon %}
-| {{ app.name }} | {{ app.type }} | {{ app.status }} | {{ health_results.oh_exchange | default('N/A') if app.name == 'exchange-api' else 'N/A' }} |
-{% endfor %}
-{% endif %}
-
 {% if app_inventory.tsstore | length > 0 %}
 ### ts-store
 
@@ -111,30 +91,10 @@
 {% endfor %}
 {% endif %}
 
-{% if app_inventory.k3s | length > 0 %}
-### Kubernetes (k3s)
-
-| Instance | Port | Status |
-|----------|------|--------|
-{% for app in app_inventory.k3s %}
-| {{ app.name }} | {{ app.port }} | {{ app.status }} |
-{% endfor %}
-{% endif %}
-
-{% if app_inventory.docker_registry | length > 0 %}
-### Docker Registry
-
-| Instance | Status | Health |
-|----------|--------|--------|
-{% for app in app_inventory.docker_registry %}
-| {{ app.name }} | {{ app.status }} | {{ health_results.docker_registry | default('N/A') }} |
-{% endfor %}
-{% endif %}
-
 ---
 
 ## Docker
-{% set categorized_containers = app_inventory.dashboard + app_inventory.edgelake + app_inventory.open_horizon + app_inventory.docker_registry %}
+{% set categorized_containers = app_inventory.dashboard %}
 {% set categorized_names = categorized_containers | map(attribute='name') | list %}
 {% set uncategorized = docker_containers | rejectattr('name', 'in', categorized_names) | list %}
 
@@ -171,7 +131,7 @@ _Docker not available_
 | Service | Status |
 |---------|--------|
 {% for svc in system_services %}
-{% if svc in ['horizon', 'k3s', 'tsstore', 'system-stats', 'journal-logs', 'mosquitto', 'roonserver', 'libvirtd', 'vsftpd'] %}
+{% if svc in ['tsstore', 'system-stats', 'journal-logs', 'mosquitto'] %}
 | {{ svc }} | running |
 {% endif %}
 {% endfor %}

@@ -2,57 +2,44 @@ all:
   children:
     hub:
       hosts:
-        trv-srv-001:
-          ansible_host: <hub-tailscale-ip>
+        srv-001:
+          ansible_host: <tailscale-ip>
           lan_ip: null
-          role: Hub server (master, query, OH hub)
-        trv-srv-002:
-          ansible_host: <proxmox-tailscale-ip>
-          lan_ip: <proxmox-lan-ip>
-          role: Proxmox VE (UM890 Pro)
-
-    edge:
-      hosts:
-        trv-srv-012:
-          ansible_host: <edge-srv-012-tailscale-ip>
-          role: EdgeLake operator (docker-compose)
-        trv-srv-014:
-          ansible_host: <edge-srv-014-tailscale-ip>
-          role: EdgeLake operator (Open Horizon)
+          role: Hub server (ts-store, stats)
+        srv-002:
+          ansible_host: <tailscale-ip>
+          lan_ip: <lan-ip>
+          role: Proxmox VE host
 
     pis:
       hosts:
-        trv-pi-001:
-          ansible_host: <pi-001-tailscale-ip>
-          lan_ip: <pi-001-lan-ip>
+        pi-001:
+          ansible_host: <tailscale-ip>
+          lan_ip: <lan-ip>
           role: ts-store + SenseHat
-        trv-pi-002:
-          ansible_host: <pi-002-tailscale-ip>
+        pi-002:
+          ansible_host: <tailscale-ip>
           role: Mosquitto + ts-store + Shelly
 
     kiosk:
       hosts:
-        trv-jetson-nano:
-          ansible_host: <jetson-tailscale-ip>
-          role: Voice-controlled smart display (Jetson Nano)
-          ansible_python_interpreter: /usr/bin/python3
-        trv-kiosk-001:
-          ansible_host: <kiosk-tailscale-ip>
-          lan_ip: <kiosk-lan-ip>
-          role: Voice-controlled kiosk (Minisforum M1)
+        kiosk-001:
+          ansible_host: <tailscale-ip>
+          lan_ip: <lan-ip>
+          role: Voice-controlled kiosk
 
     apps:
       hosts:
         dashboard:
-          ansible_host: <dashboard-tailscale-ip>
-          lan_ip: <dashboard-lan-ip>
-          role: Dashboard app (LXC on trv-srv-002)
+          ansible_host: <tailscale-ip>
+          lan_ip: <lan-ip>
+          role: Dashboard app (LXC)
         services:
-          ansible_host: <services-tailscale-ip>
-          role: Services container (LXC on trv-srv-002) - Mosquitto
+          ansible_host: <tailscale-ip>
+          role: Services (LXC) - Mosquitto, Zigbee2MQTT, Homebridge
         nvr:
-          ansible_host: <nvr-tailscale-ip>
-          role: NVR stack (LXC on trv-srv-002) - Frigate, Scrypted
+          ansible_host: <tailscale-ip>
+          role: NVR (LXC) - Frigate, Scrypted
 
   vars:
     ansible_user: <user>
