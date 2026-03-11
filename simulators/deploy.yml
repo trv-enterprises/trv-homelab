@@ -1,0 +1,162 @@
+---
+# Ansible playbook for deploying simulators to LXD container
+#
+# Usage:
+#   ansible-playbook -i inventory.yml deploy.yml
+#   ansible-playbook -i inventory.yml deploy.yml --tags sync
+#   ansible-playbook -i inventory.yml deploy.yml --tags restart
+
+- name: Deploy Simulators to LXD Container
+  hosts: trv-srv-001
+  gather_facts: false
+
+  vars:
+    simulator_source: "{{ playbook_dir }}/../../dashboard/simulators"
+    env_file: "{{ playbook_dir }}/env/production.env"
+    remote_path: "{{ simulators_path }}"
+    lxc_container: "{{ lxd_container }}"
+
+  tasks:
+    # ─────────────────────────────────────────────────────────────────────────
+    # Sync simulator source code to LXD container
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Sync simulator source to container
+      tags: [sync, deploy]
+      block:
+        - name: Create temp directory on host
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: simulators_
+          register: temp_dir
+
+        - name: Sync source to host temp directory
+          ansible.builtin.synchronize:
+            src: "{{ simulator_source }}/"
+            dest: "{{ temp_dir.path }}/"
+            delete: true
+            rsync_opts:
+              - "--exclude=.git"
+              - "--exclude=.claude"
+              - "--exclude=*.pyc"
+              - "--exclude=__pycache__"
+              - "--exclude=.DS_Store"
+              - "--exclude=._*"
+
+        - name: Copy env file to temp directory
+          ansible.builtin.copy:
+            src: "{{ env_file }}"
+            dest: "{{ temp_dir.path }}/.env"
+            mode: '0600'
+
+        - name: Push files to LXD container
+          ansible.builtin.shell: |
+            lxc file push -r {{ temp_dir.path }}/ {{ lxc_container }}/root/
+            lxc exec {{ lxc_container }} -- mv /root/{{ temp_dir.path | basename }} {{ remote_path }}
+          args:
+            executable: /bin/bash
+
+        - name: Clean up temp directory
+          ansible.builtin.file:
+            path: "{{ temp_dir.path }}"
+            state: absent
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # tsstore uses pre-built image from GHCR - no Dockerfile needed
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Docker-compose configuration is now handled via .env file variables:
+    # TSSTORE_BUILD_CONTEXT, TSSTORE_DOCKERFILE, TSSTORE_INTERNAL_PORT, TSSTORE_PORT
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Build and start services
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Build Docker images
+      tags: [build, deploy]
+      ansible.builtin.shell: |
+        lxc exec {{ lxc_container }} -- bash -c 'cd {{ remote_path }} && docker compose build'
+      args:
+        executable: /bin/bash
+      register: build_result
+      changed_when: "'Building' in build_result.stdout"
+
+    - name: Start services
+      tags: [start, deploy, restart]
+      ansible.builtin.shell: |
+        lxc exec {{ lxc_container }} -- bash -c 'cd {{ remote_path }} && docker compose up -d'
+      args:
+        executable: /bin/bash
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Create ts-store if needed
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Wait for ts-store to be healthy
+      tags: [deploy]
+      ansible.builtin.shell: |
+        for i in {1..30}; do
+          status=$(lxc exec {{ lxc_container }} -- docker inspect simulators-tsstore --format '{{"{{"}}.State.Health.Status{{"}}"}}' 2>/dev/null || echo "waiting")
+          if [ "$status" = "healthy" ]; then
+            echo "healthy"
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "timeout"
+        exit 1
+      args:
+        executable: /bin/bash
+      register: health_check
+      changed_when: false
+
+    - name: Check if sensor-readings store exists
+      tags: [deploy]
+      ansible.builtin.uri:
+        url: "http://{{ container_ip }}:21080/api/stores"
+        method: GET
+        headers:
+          X-Admin-Key: "{{ lookup('file', env_file) | regex_search('TSSTORE_ADMIN_KEY=(.+)', '\\1') | first }}"
+        return_content: true
+      register: stores_response
+      ignore_errors: true
+
+    - name: Create sensor-readings store if missing
+      tags: [deploy]
+      ansible.builtin.uri:
+        url: "http://{{ container_ip }}:21080/api/stores"
+        method: POST
+        headers:
+          X-Admin-Key: "{{ lookup('file', env_file) | regex_search('TSSTORE_ADMIN_KEY=(.+)', '\\1') | first }}"
+          Content-Type: application/json
+        body_format: json
+        body:
+          name: sensor-readings
+          num_blocks: 200000
+          data_block_size: 512
+          index_block_size: 4096
+        status_code: [200, 201, 409]
+      when: stores_response.json.stores is not defined or 'sensor-readings' not in stores_response.json.stores
+      register: create_store
+
+    - name: Display new API key if store was created
+      tags: [deploy]
+      ansible.builtin.debug:
+        msg: "New store created! API Key: {{ create_store.json.api_key }}"
+      when: create_store is defined and create_store.json is defined and create_store.json.api_key is defined
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Status check
+    # ─────────────────────────────────────────────────────────────────────────
+    - name: Show service status
+      tags: [status, deploy]
+      ansible.builtin.shell: |
+        lxc exec {{ lxc_container }} -- docker compose -f {{ remote_path }}/docker-compose.yml ps
+      args:
+        executable: /bin/bash
+      register: status
+      changed_when: false
+
+    - name: Display status
+      tags: [status, deploy]
+      ansible.builtin.debug:
+        msg: "{{ status.stdout_lines }}"

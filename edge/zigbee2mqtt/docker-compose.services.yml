@@ -1,0 +1,55 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    volumes:
+      - mosquitto_config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt
+    restart: unless-stopped
+    volumes:
+      - zigbee2mqtt_data:/app/data
+    ports:
+      - "8080:8080"
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    environment:
+      - TZ=America/New_York
+    depends_on:
+      - mosquitto
+
+  weather-poller:
+    image: ghcr.io/<github-username>/weather-poller:latest
+    restart: unless-stopped
+    env_file:
+      - weather-poller.env
+    environment:
+      - TZ=America/Chicago
+    depends_on:
+      - mosquitto
+
+  homebridge:
+    image: homebridge/homebridge:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - homebridge_data:/homebridge
+    environment:
+      - TZ=America/Chicago
+      - HOMEBRIDGE_CONFIG_UI=1
+      - HOMEBRIDGE_CONFIG_UI_PORT=8581
+    depends_on:
+      - mosquitto
+
+volumes:
+  mosquitto_config:
+  mosquitto_data:
+  mosquitto_log:
+  zigbee2mqtt_data:
+  homebridge_data:

@@ -1,0 +1,24 @@
+---
+# Dashboard deployment configuration
+
+# GitHub Container Registry
+ghcr_registry: ghcr.io/<github-username>
+
+# Image names
+dashboard_server_image: "{{ ghcr_registry }}/dashboard-server"
+dashboard_client_image: "{{ ghcr_registry }}/dashboard-client"
+
+# Default version (override with --extra-vars "dashboard_version=0.3.0")
+# Note: GHCR tags do NOT have 'v' prefix
+dashboard_version: 0.3.1
+
+# Deployment directory on target
+dashboard_deploy_dir: /opt/dashboard
+
+# Domain for Caddy (use IP or hostname for direct access)
+# :80 prefix forces HTTP-only mode (no TLS)
+# IP address alone would trigger self-signed TLS which has issues
+dashboard_domain: ":80"
+
+# Required: Set via --extra-vars or environment
+# anthropic_api_key: "sk-ant-..."

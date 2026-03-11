@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRV Homelab Launcher</title>
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<h1><i class="fas fa-server"></i> TRV Homelab Launcher</h1>
+
+<div class="container-fluid">
+  <div class="row">
+
+    <!-- Servers (SSH) -->
+    <div class="section">
+      <h3><i class="fas fa-terminal"></i> Servers</h3>
+
+      <a href="ssh://<user>@<hub-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-server fa-lg"></i></div>
+          <div class="col2">trv-srv-001</div>
+        </div>
+      </a>
+
+      <a href="ssh://root@<proxmox-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-server fa-lg"></i></div>
+          <div class="col2">trv-srv-002 (root)</div>
+        </div>
+      </a>
+
+      <a href="ssh://<user>@<dashboard-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-chart-line fa-lg"></i></div>
+          <div class="col2">dashboard</div>
+        </div>
+      </a>
+
+      <a href="ssh://<user>@<services-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-cloud fa-lg"></i></div>
+          <div class="col2">services</div>
+        </div>
+      </a>
+
+      <a href="ssh://<user>@<nvr-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-video fa-lg"></i></div>
+          <div class="col2">nvr</div>
+        </div>
+      </a>
+
+      <a href="ssh://<user>@<photos-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-images fa-lg"></i></div>
+          <div class="col2">photos</div>
+        </div>
+      </a>
+
+      <a href="ssh://<user>@<pi-002-tailscale-ip>">
+        <div class="demo demo-server">
+          <div class="col1"><i class="fas fa-microchip fa-lg"></i></div>
+          <div class="col2">trv-pi-002</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Apps -->
+    <div class="section">
+      <h3><i class="fas fa-rocket"></i> Apps</h3>
+
+      <a href="http://<nvr-tailscale-ip>:5000" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-video fa-lg"></i></div>
+          <div class="col2">Frigate</div>
+        </div>
+      </a>
+
+      <a href="https://<nvr-tailscale-ip>:10443" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-house-signal fa-lg"></i></div>
+          <div class="col2">Scrypted</div>
+        </div>
+      </a>
+
+      <a href="http://<photos-tailscale-ip>:2283" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-images fa-lg"></i></div>
+          <div class="col2">Immich (Photos)</div>
+        </div>
+      </a>
+
+      <a href="http://<dashboard-tailscale-ip>" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-chart-line fa-lg"></i></div>
+          <div class="col2">Dashboard</div>
+        </div>
+      </a>
+
+      <a href="https://<proxmox-tailscale-ip>:8006" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-cubes fa-lg"></i></div>
+          <div class="col2">Proxmox</div>
+        </div>
+      </a>
+
+      <a href="http://<synology-tailscale-ip>:5000" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-hard-drive fa-lg"></i></div>
+          <div class="col2">Synology NAS</div>
+        </div>
+      </a>
+
+      <a href="http://<services-tailscale-ip>:8080" target="_blank">
+        <div class="demo demo-app">
+          <div class="col1"><i class="fas fa-tower-broadcast fa-lg"></i></div>
+          <div class="col2">Zigbee2MQTT</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- EdgeLake -->
+    <div class="section">
+      <h3><i class="fas fa-database"></i> EdgeLake</h3>
+
+      <a href="http://<hub-tailscale-ip>:32049" target="_blank">
+        <div class="demo demo-edgelake">
+          <div class="col1"><i class="fas fa-crown fa-lg"></i></div>
+          <div class="col2">Master Node</div>
+        </div>
+      </a>
+
+      <a href="http://<hub-tailscale-ip>:32349" target="_blank">
+        <div class="demo demo-edgelake">
+          <div class="col1"><i class="fas fa-magnifying-glass fa-lg"></i></div>
+          <div class="col2">Query Node</div>
+        </div>
+      </a>
+
+      <a href="http://<edge-srv-012-tailscale-ip>:32149" target="_blank">
+        <div class="demo demo-edgelake">
+          <div class="col1"><i class="fas fa-gear fa-lg"></i></div>
+          <div class="col2">Operator 1</div>
+        </div>
+      </a>
+
+      <a href="http://<edge-srv-014-tailscale-ip>:32249" target="_blank">
+        <div class="demo demo-edgelake">
+          <div class="col1"><i class="fas fa-gear fa-lg"></i></div>
+          <div class="col2">Operator 2 (OH)</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Reports & Actions -->
+    <div class="section">
+      <h3><i class="fas fa-file-lines"></i> Reports</h3>
+
+      <a href="file:///path/to/trv-homelab/svr-rpts/latest" target="_blank">
+        <div class="demo demo-report">
+          <div class="col1"><i class="fas fa-file-alt fa-lg"></i></div>
+          <div class="col2">Latest Infra Report</div>
+        </div>
+      </a>
+
+      <a href="#" onclick="alert('Run: cd ~/Documents/GitHub/trv-homelab/tools/ansible && ansible-playbook playbooks/server-report.yml'); return false;">
+        <div class="demo demo-action">
+          <div class="col1"><i class="fas fa-play fa-lg"></i></div>
+          <div class="col2">Run Infra Report</div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Documentation -->
+    <div class="section">
+      <h3><i class="fas fa-book"></i> Documentation</h3>
+
+      <a href="file:///path/to/trv-homelab/README.md" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-home fa-lg"></i></div>
+          <div class="col2">Homelab README</div>
+        </div>
+      </a>
+
+      <a href="file:///path/to/dashboard/README.md" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-chart-line fa-lg"></i></div>
+          <div class="col2">Dashboard README</div>
+        </div>
+      </a>
+
+      <a href="file:///path/to/ts-store/README.md" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-database fa-lg"></i></div>
+          <div class="col2">TS-Store README</div>
+        </div>
+      </a>
+
+      <a href="file:///path/to/trv-homelab/docs/TRV Homelab Infrastructure.png" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-sitemap fa-lg"></i></div>
+          <div class="col2">Homelab Architecture</div>
+        </div>
+      </a>
+
+      <a href="file:///path/to/dashboard/docs/architecture.md" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-sitemap fa-lg"></i></div>
+          <div class="col2">Dashboard Arch</div>
+        </div>
+      </a>
+
+      <a href="file:///path/to/ts-store/docs/architecture.md" target="_blank">
+        <div class="demo demo-docs">
+          <div class="col1"><i class="fas fa-sitemap fa-lg"></i></div>
+          <div class="col2">TS-Store Arch</div>
+        </div>
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  TRV Homelab | <i class="fas fa-code"></i> Built with simplicity
+</footer>
+
+</body>
+</html>

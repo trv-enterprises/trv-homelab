@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.metadata.hostname }}-deployment
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    {{- include "edgelake-operator.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "edgelake-operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "edgelake-operator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.metadata.node_selector }}
+      nodeSelector:
+        {{ .Values.metadata.node_selector }}
+      {{- end }}
+      {{- if .Values.image.secret_name }}
+      imagePullSecrets:
+      - name: {{ .Values.image.secret_name }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.metadata.hostname }}-container
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pull_policy }}
+        ports:
+        - name: tcp-server
+          containerPort: {{ .Values.node_configs.networking.ANYLOG_SERVER_PORT }}
+          protocol: TCP
+        - name: rest-api
+          containerPort: {{ .Values.node_configs.networking.ANYLOG_REST_PORT }}
+          protocol: TCP
+        {{- if .Values.node_configs.networking.ANYLOG_BROKER_PORT }}
+        - name: mqtt-broker
+          containerPort: {{ .Values.node_configs.networking.ANYLOG_BROKER_PORT }}
+          protocol: TCP
+        {{- end }}
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.metadata.configmap_name }}
+        tty: true
+        stdin: true
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: anylog-volume
+          mountPath: /app/EdgeLake/anylog
+        - name: blockchain-volume
+          mountPath: /app/EdgeLake/blockchain
+        - name: data-volume
+          mountPath: /app/EdgeLake/data
+        - name: scripts-volume
+          mountPath: /app/deployment-scripts
+      volumes:
+      {{- if .Values.persistence.enabled }}
+      - name: anylog-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.metadata.app_name }}-anylog-pvc
+      - name: blockchain-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.metadata.app_name }}-blockchain-pvc
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.metadata.app_name }}-data-pvc
+      - name: scripts-volume
+        persistentVolumeClaim:
+          claimName: {{ .Values.metadata.app_name }}-scripts-pvc
+      {{- else }}
+      - name: anylog-volume
+        emptyDir: {}
+      - name: blockchain-volume
+        emptyDir: {}
+      - name: data-volume
+        emptyDir: {}
+      - name: scripts-volume
+        emptyDir: {}
+      {{- end }}

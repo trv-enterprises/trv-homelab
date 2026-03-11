@@ -1,0 +1,33 @@
+{
+  "properties": [
+    {
+      "name": "purpose",
+      "value": "edgelake-kubernetes"
+    },
+    {
+      "name": "openhorizon.kubernetesEnabled",
+      "value": true
+    },
+    {
+      "name": "cluster_type",
+      "value": "kubernetes"
+    }
+  ],
+  "constraints": [],
+  "deployment": {
+    "services": [
+      {
+        "org": "$HZN_ORG_ID",
+        "url": "edgelake-kube-operator",
+        "versionRange": "[0.0.0,INFINITY)",
+        "variables": {
+          "EDGELAKE_NODE_NAME": "edgelake-operator-cluster-a",
+          "EDGELAKE_OVERLAY_IP": "100.x.x.x",
+          "EDGELAKE_CLUSTER_NAME": "cluster-a",
+          "EDGELAKE_SERVER_PORT": 32148,
+          "EDGELAKE_REST_PORT": 32149
+        }
+      }
+    ]
+  }
+}

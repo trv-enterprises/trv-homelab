@@ -1,0 +1,28 @@
+---
+# Main task orchestration for server-report role
+
+- name: Load app definitions
+  ansible.builtin.include_vars:
+    file: apps.yml
+
+- name: Gather system facts
+  ansible.builtin.include_tasks: system-info.yml
+
+- name: Detect Docker containers
+  ansible.builtin.include_tasks: docker.yml
+
+- name: Detect systemd services
+  ansible.builtin.include_tasks: systemd.yml
+
+- name: Categorize applications
+  ansible.builtin.include_tasks: apps.yml
+
+- name: Run health checks
+  ansible.builtin.include_tasks: health-checks.yml
+
+- name: Generate host report
+  ansible.builtin.template:
+    src: host-report.md.j2
+    dest: "{{ report_dir }}/{{ inventory_hostname }}.md"
+    mode: '0644'
+  delegate_to: localhost

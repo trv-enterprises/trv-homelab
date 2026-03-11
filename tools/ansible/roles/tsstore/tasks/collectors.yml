@@ -1,0 +1,35 @@
+---
+# Deploy tsstore collectors
+
+- name: Copy collector binaries
+  ansible.builtin.copy:
+    src: "{{ tsstore_local_bin_path }}/{{ item.name }}-linux-{{ tsstore_arch }}"
+    dest: "{{ tsstore_bin_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: '0755'
+  loop: "{{ tsstore_collectors }}"
+  become: true
+  notify: "Restart {{ item.name }}"
+  ignore_errors: true  # Some collectors may not exist
+
+- name: Create collector systemd services
+  ansible.builtin.template:
+    src: collector.service.j2
+    dest: "/etc/systemd/system/{{ item.name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ tsstore_collectors }}"
+  become: true
+  notify:
+    - Reload systemd
+
+- name: Enable and start collector services
+  ansible.builtin.systemd:
+    name: "{{ item.name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop: "{{ tsstore_collectors }}"
+  become: true

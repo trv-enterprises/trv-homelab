@@ -1,0 +1,204 @@
+{
+  "org": "$HZN_ORG_ID",
+  "label": "$SERVICE_NAME for $ARCH",
+  "description": "EdgeLake Operator service deployed via Open Horizon",
+  "documentation": "https://github.com/EdgeLake/EdgeLake",
+  "url": "$SERVICE_NAME",
+  "version": "$SERVICE_VERSION",
+  "arch": "$ARCH",
+  "public": true,
+  "sharable": "singleton",
+  "requiredServices": [],
+  "userInput": [
+    {
+      "name": "ANYLOG_PATH",
+      "label": "EdgeLake dir path",
+      "type": "string",
+      "defaultValue": "/app"
+    },
+    {
+      "name": "CONN_IP",
+      "label": "IP address to bind to (0.0.0.0 for all interfaces)",
+      "type": "string",
+      "defaultValue": "0.0.0.0"
+    },
+    {
+      "name": "CLI_PORT",
+      "label": "Remote CLI port",
+      "type": "int",
+      "defaultValue": "31800"
+    },
+    {
+      "name": "INIT_TYPE",
+      "label": "Whether to deploy EdgeLake or shell as a docker container",
+      "type": "string",
+      "defaultValue": "prod"
+    },
+    {
+      "name": "DISABLE_CLI",
+      "label": "Disable CLI",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "NODE_TYPE",
+      "label": "EdgeLake node type (operator, master, query)",
+      "type": "string",
+      "defaultValue": "operator"
+    },
+    {
+      "name": "NODE_NAME",
+      "label": "Name of the EdgeLake instance",
+      "type": "string",
+      "defaultValue": "edgelake-operator"
+    },
+    {
+      "name": "COMPANY_NAME",
+      "label": "Owner of the EdgeLake instance",
+      "type": "string",
+      "defaultValue": "New Company"
+    },
+    {
+      "name": "ANYLOG_SERVER_PORT",
+      "label": "Port address used by EdgeLake's TCP protocol",
+      "type": "int",
+      "defaultValue": "32148"
+    },
+    {
+      "name": "ANYLOG_REST_PORT",
+      "label": "Port address used by EdgeLake's REST protocol",
+      "type": "int",
+      "defaultValue": "32149"
+    },
+    {
+      "name": "TCP_BIND",
+      "label": "Bind to specific IP and Port",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "REST_BIND",
+      "label": "Bind REST to specific IP and Port",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "BROKER_BIND",
+      "label": "Bind broker to specific IP and Port",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "LEDGER_CONN",
+      "label": "TCP connection information for Master Node",
+      "type": "string",
+      "defaultValue": "100.127.19.27:32048"
+    },
+    {
+      "name": "BLOCKCHAIN_SOURCE",
+      "label": "Blockchain source (master, optimism)",
+      "type": "string",
+      "defaultValue": "master"
+    },
+    {
+      "name": "BLOCKCHAIN_SYNC",
+      "label": "How often to sync from blockchain",
+      "type": "string",
+      "defaultValue": "30 second"
+    },
+    {
+      "name": "DB_TYPE",
+      "label": "Physical database type (sqlite or psql)",
+      "type": "string",
+      "defaultValue": "sqlite"
+    },
+    {
+      "name": "DB_USER",
+      "label": "Database username",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "DB_PASSWD",
+      "label": "Database password",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "DB_IP",
+      "label": "Database IP address",
+      "type": "string",
+      "defaultValue": "127.0.0.1"
+    },
+    {
+      "name": "DB_PORT",
+      "label": "Database port number",
+      "type": "int",
+      "defaultValue": "5432"
+    },
+    {
+      "name": "SYSTEM_QUERY",
+      "label": "Start system_query logical database",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "MEMORY",
+      "label": "Run system_query using in-memory SQLite",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "CLUSTER_NAME",
+      "label": "Owner of the cluster",
+      "type": "string",
+      "defaultValue": "production-cluster"
+    },
+    {
+      "name": "DEFAULT_DBMS",
+      "label": "Default logical database name",
+      "type": "string",
+      "defaultValue": "production_data"
+    },
+    {
+      "name": "ENABLE_MQTT",
+      "label": "Whether to enable the default MQTT process",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "DEPLOY_LOCAL_SCRIPT",
+      "label": "Run local script at the end of deployment",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "MONITOR_NODES",
+      "label": "Whether to monitor the node",
+      "type": "bool",
+      "defaultValue": "true"
+    },
+    {
+      "name": "OVERLAY_IP",
+      "label": "IP address of this node",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "deployment": {
+    "services": {
+      "$SERVICE_NAME": {
+        "image": "$DOCKER_IMAGE_BASE:$DOCKER_IMAGE_VERSION",
+        "container_name": "edgelake-operator",
+        "network": "host",
+        "privileged": true,
+        "binds": [
+          "edgelake-operator-anylog:/app/EdgeLake/anylog",
+          "edgelake-operator-blockchain:/app/EdgeLake/blockchain",
+          "edgelake-operator-data:/app/EdgeLake/data",
+          "edgelake-operator-local-scripts:/app/deployment-scripts"
+        ]
+      }
+    }
+  }
+}

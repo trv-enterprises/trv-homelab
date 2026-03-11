@@ -1,0 +1,22 @@
+# Zigbee2MQTT Configuration Template
+# WARNING: The live config on the services LXC contains a generated network_key.
+# Do NOT run `make deploy-config` after devices are paired — it will overwrite
+# the network key and force all devices to re-pair.
+
+homeassistant: false
+permit_join: true
+
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://mosquitto:1883
+
+serial:
+  port: /dev/ttyUSB0
+  adapter: ember
+
+frontend:
+  port: 8080
+
+advanced:
+  network_key: GENERATE
+  log_level: info

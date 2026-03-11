@@ -1,0 +1,18 @@
+---
+# Weather Poller deployment configuration
+
+# GitHub Container Registry
+ghcr_registry: ghcr.io/<github-username>
+
+# Image
+weather_poller_image: "{{ ghcr_registry }}/weather-poller"
+weather_poller_version: latest
+
+# Deployment directory (shared services stack)
+services_deploy_dir: /opt/services
+
+# Weather config defaults (overridable via --extra-vars)
+weather_location: "Spring,TX"
+mqtt_broker: "tcp://mosquitto:1883"
+poll_interval: "15m"
+alert_interval: "5m"

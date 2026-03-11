@@ -1,0 +1,44 @@
+---
+# Detect Docker containers
+
+- name: Check if Docker is available
+  ansible.builtin.command: docker --version
+  register: docker_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Set Docker available flag
+  ansible.builtin.set_fact:
+    docker_available: "{{ docker_check.rc == 0 }}"
+
+- name: Get running Docker containers
+  ansible.builtin.command: >
+    docker ps --format {% raw %}'{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}'{% endraw %}
+  register: docker_ps_raw
+  when: docker_available
+  ignore_errors: true
+  changed_when: false
+
+- name: Parse Docker containers
+  ansible.builtin.set_fact:
+    docker_containers: "{{ docker_containers | default([]) + [{'name': item.split('|')[0], 'image': item.split('|')[1], 'status': item.split('|')[2], 'ports': item.split('|')[3] | default('')}] }}"
+  loop: "{{ docker_ps_raw.stdout_lines | default([]) }}"
+  when: docker_available and docker_ps_raw is succeeded and item | length > 0
+
+- name: Get Docker volumes
+  ansible.builtin.command: docker volume ls --format {% raw %}'{{.Name}}'{% endraw %}
+  register: docker_volumes_raw
+  when: docker_available
+  ignore_errors: true
+  changed_when: false
+
+- name: Store Docker volumes
+  ansible.builtin.set_fact:
+    docker_volumes: "{{ docker_volumes_raw.stdout_lines | default([]) }}"
+  when: docker_available and docker_volumes_raw is succeeded
+
+- name: Initialize empty Docker data if not available
+  ansible.builtin.set_fact:
+    docker_containers: []
+    docker_volumes: []
+  when: not docker_available

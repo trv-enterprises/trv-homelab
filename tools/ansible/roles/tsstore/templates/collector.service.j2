@@ -1,0 +1,23 @@
+[Unit]
+Description=tsstore {{ item.name }} collector
+After=network.target tsstore.service
+Requires=tsstore.service
+
+[Service]
+Type=simple
+User={{ tsstore_user }}
+Group={{ tsstore_group }}
+ExecStart={{ tsstore_bin_dir }}/{{ item.name }} \
+    -socket {{ tsstore_socket }} \
+    -store {{ item.name }} \
+{% if item.interval is defined %}
+    -interval {{ item.interval }}
+{% endif %}
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

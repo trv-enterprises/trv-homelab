@@ -1,0 +1,19 @@
+apiVersion: v2
+name: edgelake-operator
+description: A Helm chart for deploying EdgeLake Operator nodes on Kubernetes
+type: application
+version: 1.0.0
+appVersion: "1.3.2500"
+keywords:
+  - edgelake
+  - anylog
+  - distributed-database
+  - edge-computing
+  - operator
+home: https://github.com/EdgeLake/EdgeLake
+sources:
+  - https://github.com/EdgeLake/EdgeLake
+  - https://github.com/EdgeLake/docker-compose
+maintainers:
+  - name: EdgeLake Team
+    email: support@edgelake.com

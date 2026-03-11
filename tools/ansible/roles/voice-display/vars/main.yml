@@ -1,0 +1,28 @@
+---
+# Voice Display deployment configuration
+
+# Deployment directory on Jetson
+voice_display_deploy_dir: /opt/voice-display
+
+# Source directory (relative to repo root)
+voice_display_src_dir: "{{ playbook_dir }}/../../../devices/voice-display"
+
+# Display app settings
+voice_display_port: 5174
+voice_display_api_url: "http://<dashboard-tailscale-ip>:3001"
+
+# Voice pipeline settings
+voice_websocket_port: 8765
+
+# Audio device (EMEET M0 Plus detected on card 2)
+voice_audio_device: "plughw:2,0"
+
+# System user to run services
+voice_display_user: "{{ ansible_user }}"
+voice_display_group: "{{ ansible_user }}"
+
+# Node.js version (for nvm)
+nodejs_version: "18"
+
+# Python version
+python_version: "3.8"

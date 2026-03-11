@@ -1,0 +1,116 @@
+---
+# Run health checks against application REST endpoints
+
+- name: Initialize health check results
+  ansible.builtin.set_fact:
+    health_results: {}
+
+# Dashboard health check
+- name: Check Dashboard API (3001)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:3001/health"
+    method: GET
+    timeout: 5
+    status_code: [200]
+  register: dashboard_health
+  ignore_errors: true
+  when: app_inventory.dashboard | length > 0
+
+- name: Store Dashboard health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'dashboard': 'healthy' if dashboard_health is succeeded else 'unhealthy'}) }}"
+  when: dashboard_health is defined
+
+# EdgeLake health checks
+- name: Check EdgeLake master REST (32049)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:32049/"
+    method: GET
+    timeout: 5
+    status_code: [200, 401, 403]
+  register: el_master_health
+  ignore_errors: true
+  when: app_inventory.edgelake | selectattr('name', 'contains', 'master') | list | length > 0
+
+- name: Store EdgeLake master health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'edgelake_master': 'healthy' if el_master_health is succeeded else 'unhealthy'}) }}"
+  when: el_master_health is defined
+
+- name: Check EdgeLake query REST (32349)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:32349/"
+    method: GET
+    timeout: 5
+    status_code: [200, 401, 403]
+  register: el_query_health
+  ignore_errors: true
+  when: app_inventory.edgelake | selectattr('name', 'contains', 'query') | list | length > 0
+
+- name: Store EdgeLake query health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'edgelake_query': 'healthy' if el_query_health is succeeded else 'unhealthy'}) }}"
+  when: el_query_health is defined
+
+- name: Check EdgeLake operator REST (32149)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:32149/"
+    method: GET
+    timeout: 5
+    status_code: [200, 401, 403]
+  register: el_operator_health
+  ignore_errors: true
+  when: app_inventory.edgelake | selectattr('name', 'contains', 'operator') | list | length > 0
+
+- name: Store EdgeLake operator health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'edgelake_operator': 'healthy' if el_operator_health is succeeded else 'unhealthy'}) }}"
+  when: el_operator_health is defined
+
+# Open Horizon Exchange health check
+- name: Check OH Exchange API (3090)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:3090/v1/admin/version"
+    method: GET
+    timeout: 5
+    status_code: [200, 401, 403]
+  register: oh_exchange_health
+  ignore_errors: true
+  when: app_inventory.open_horizon | selectattr('name', 'equalto', 'exchange-api') | list | length > 0
+
+- name: Store OH Exchange health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'oh_exchange': 'healthy' if oh_exchange_health is succeeded else 'unhealthy'}) }}"
+  when: oh_exchange_health is defined
+
+# ts-store health check
+- name: Check ts-store REST (21080)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:21080/health"
+    method: GET
+    timeout: 5
+    status_code: [200, 404]
+  register: tsstore_health
+  ignore_errors: true
+  when: app_inventory.tsstore | length > 0
+
+- name: Store ts-store health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'tsstore': 'healthy' if tsstore_health is succeeded else 'unhealthy'}) }}"
+  when: tsstore_health is defined
+
+# Docker Registry health check
+- name: Check Docker Registry (5000)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:5000/v2/"
+    method: GET
+    timeout: 5
+    status_code: [200, 401]
+  register: registry_health
+  ignore_errors: true
+  when: app_inventory.docker_registry | length > 0
+
+- name: Store Docker Registry health
+  ansible.builtin.set_fact:
+    health_results: "{{ health_results | combine({'docker_registry': 'healthy' if registry_health is succeeded else 'unhealthy'}) }}"
+  when: registry_health is defined

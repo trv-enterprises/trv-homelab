@@ -1,0 +1,60 @@
+---
+# Our Kiosk Setup Playbook - Initial Jetson Setup
+#
+# This playbook installs prerequisites on the Jetson Nano:
+# - Node.js 18 (via NodeSource)
+# - Python3 venv package
+#
+# Run once before our-kiosk-deploy.yml:
+#   ansible-playbook playbooks/our-kiosk-setup.yml -K
+
+- name: Setup Jetson for Our Kiosk
+  hosts: trv-jetson-nano
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Check if Node.js is already installed
+      ansible.builtin.raw: which node
+      register: node_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Node.js 18 from NodeSource
+      when: node_check.rc != 0
+      block:
+        - name: Download NodeSource setup script
+          ansible.builtin.raw: |
+            curl -fsSL https://deb.nodesource.com/setup_18.x -o /tmp/nodesource_setup.sh
+          changed_when: true
+
+        - name: Run NodeSource setup script
+          ansible.builtin.raw: |
+            bash /tmp/nodesource_setup.sh
+          changed_when: true
+
+        - name: Install Node.js
+          ansible.builtin.raw: |
+            apt-get install -y nodejs
+          changed_when: true
+
+    - name: Verify Node.js installation
+      ansible.builtin.raw: node --version && npm --version
+      register: node_version
+      changed_when: false
+
+    - name: Install Python3 venv package
+      ansible.builtin.raw: |
+        apt-get install -y python3-venv python3-pip
+      changed_when: true
+
+    - name: Display setup status
+      ansible.builtin.debug:
+        msg: |
+          Jetson setup complete!
+
+          Node.js: {{ node_version.stdout_lines[0] | default('unknown') }}
+          NPM: {{ node_version.stdout_lines[1] | default('unknown') }}
+
+          Next step: Run the deployment playbook
+            ansible-playbook playbooks/our-kiosk-deploy.yml

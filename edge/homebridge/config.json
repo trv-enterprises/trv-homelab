@@ -1,0 +1,109 @@
+{
+  "bridge": {
+    "name": "Homebridge",
+    "username": "CC:22:3D:E3:CE:30",
+    "port": 51826,
+    "pin": "XXX-XX-XXX"
+  },
+  "accessories": [
+    {
+      "accessory": "mqttthing",
+      "type": "lightbulb-ColourTemperature",
+      "name": "Hue Light",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getOn":            "zigbee2mqtt/Hue Light 2CE68C",
+        "setOn":            "zigbee2mqtt/Hue Light 2CE68C/set",
+        "getBrightness":    "zigbee2mqtt/Hue Light 2CE68C",
+        "setBrightness":    "zigbee2mqtt/Hue Light 2CE68C/set",
+        "getHue":           "zigbee2mqtt/Hue Light 2CE68C",
+        "setHue":           "zigbee2mqtt/Hue Light 2CE68C/set",
+        "getSaturation":    "zigbee2mqtt/Hue Light 2CE68C",
+        "setSaturation":    "zigbee2mqtt/Hue Light 2CE68C/set",
+        "getColorTemperature": "zigbee2mqtt/Hue Light 2CE68C",
+        "setColorTemperature": "zigbee2mqtt/Hue Light 2CE68C/set"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "outlet",
+      "name": "Kitchen Plug",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getOn":      "zigbee2mqtt/Shelly Plug Kitchen",
+        "setOn":      "zigbee2mqtt/Shelly Plug Kitchen/set"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "outlet",
+      "name": "Dining Room Plug",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getOn":      "zigbee2mqtt/Shelly Plug Dining Room",
+        "setOn":      "zigbee2mqtt/Shelly Plug Dining Room/set"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "humiditySensor",
+      "name": "Back Porch Pot",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getCurrentRelativeHumidity": "zigbee2mqtt/Back Porch Pot",
+        "getStatusLowBattery":        "zigbee2mqtt/Back Porch Pot"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "humiditySensor",
+      "name": "Front Porch Pot",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getCurrentRelativeHumidity": "zigbee2mqtt/Front Porch Pot",
+        "getStatusLowBattery":        "zigbee2mqtt/Front Porch Pot"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "humiditySensor",
+      "name": "Soil Sensor 3",
+      "url": "mqtt://localhost:1883",
+      "topics": {
+        "getCurrentRelativeHumidity": "zigbee2mqtt/0xffffb40e0606baff",
+        "getStatusLowBattery":        "zigbee2mqtt/0xffffb40e0606baff"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "contactSensor",
+      "name": "Large Garage Door",
+      "url": "mqtt://localhost:1883",
+      "integerValue": true,
+      "topics": {
+        "getContactSensorState": "zigbee2mqtt/Large Garage Door",
+        "getStatusLowBattery":   "zigbee2mqtt/Large Garage Door"
+      },
+      "codec": "z2m-codec.js"
+    },
+    {
+      "accessory": "mqttthing",
+      "type": "contactSensor",
+      "name": "Small Garage Door",
+      "url": "mqtt://localhost:1883",
+      "integerValue": true,
+      "topics": {
+        "getContactSensorState": "zigbee2mqtt/Small Garage Door",
+        "getStatusLowBattery":   "zigbee2mqtt/Small Garage Door"
+      },
+      "codec": "z2m-codec.js"
+    }
+  ],
+  "platforms": []
+}

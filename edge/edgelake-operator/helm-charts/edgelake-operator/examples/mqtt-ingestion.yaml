@@ -1,0 +1,81 @@
+# EdgeLake Operator with MQTT Data Ingestion
+# Configured to receive and store data from MQTT broker
+
+metadata:
+  namespace: edgelake-iot
+  app_name: operator-mqtt
+  service_type: NodePort
+
+image:
+  repository: anylogco/edgelake-network
+  tag: "1.3.2500"
+  pull_policy: IfNotPresent
+
+persistence:
+  enabled: true
+  storageClassName: "standard"
+  anylog:
+    size: 5Gi
+  blockchain:
+    size: 1Gi
+  data:
+    size: 50Gi
+  scripts:
+    size: 1Gi
+
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+node_configs:
+  general:
+    NODE_NAME: "operator-mqtt"
+    COMPANY_NAME: "IoT Company"
+
+  networking:
+    ANYLOG_SERVER_PORT: 32148
+    ANYLOG_REST_PORT: 32149
+    # Enable MQTT broker port
+    ANYLOG_BROKER_PORT: 32150
+
+  database:
+    DB_TYPE: sqlite
+    SYSTEM_QUERY: true
+
+  blockchain:
+    LEDGER_CONN: "master-node:32048"
+    BLOCKCHAIN_SOURCE: master
+
+  operator:
+    CLUSTER_NAME: iot-cluster
+    DEFAULT_DBMS: iot_data
+    ENABLE_PARTITIONS: true
+    PARTITION_INTERVAL: "14 days"
+    PARTITION_KEEP: 2
+
+  # MQTT Configuration
+  mqtt:
+    ENABLE_MQTT: true
+    MQTT_BROKER: "mqtt-broker.iot.svc.cluster.local"
+    MQTT_PORT: 1883
+    MQTT_USER: "edgelake"
+    MQTT_PASSWD: "mqtt-password"
+    MQTT_LOG: true
+    # Subscribe to all sensor data
+    MSG_TOPIC: "sensors/+/data"
+    MSG_DBMS: iot_data
+    # Use dynamic table mapping from message
+    MSG_TABLE: "bring [table]"
+    MSG_TIMESTAMP_COLUMN: "bring [timestamp]"
+    MSG_VALUE_COLUMN: "bring [value]"
+    MSG_VALUE_COLUMN_TYPE: float
+
+  advanced:
+    QUERY_POOL: 6
+    WRITE_IMMEDIATE: true
+    THRESHOLD_TIME: "30 seconds"
+    THRESHOLD_VOLUME: "500KB"

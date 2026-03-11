@@ -1,0 +1,502 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: edgelakeoperators.edgelake.trv.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.14.0
+spec:
+  group: edgelake.trv.io
+  names:
+    kind: EdgeLakeOperator
+    listKind: EdgeLakeOperatorList
+    plural: edgelakeoperators
+    singular: edgelakeoperator
+    shortNames:
+      - elo
+      - edgelake
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Ready
+          type: boolean
+          jsonPath: .status.ready
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          description: EdgeLakeOperator is the Schema for the edgelakeoperators API
+          type: object
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: EdgeLakeOperatorSpec defines the desired state of EdgeLakeOperator
+              type: object
+              properties:
+                metadata:
+                  description: Metadata configuration for Kubernetes resources
+                  type: object
+                  properties:
+                    hostname:
+                      type: string
+                      default: edgelake-operator
+                    appName:
+                      type: string
+                      default: edgelake-operator
+                    serviceName:
+                      type: string
+                      default: edgelake-operator-service
+                    configMapName:
+                      type: string
+                      default: edgelake-operator-configmap
+                    nodeSelector:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    serviceType:
+                      type: string
+                      enum: [ClusterIP, NodePort, LoadBalancer]
+                      default: NodePort
+                image:
+                  description: Image configuration for the EdgeLake container
+                  type: object
+                  properties:
+                    secretName:
+                      type: string
+                    repository:
+                      type: string
+                      default: anylogco/edgelake-network
+                    tag:
+                      type: string
+                      default: "1.3.2500"
+                    pullPolicy:
+                      type: string
+                      enum: [Always, IfNotPresent, Never]
+                      default: IfNotPresent
+                persistence:
+                  description: Persistence configuration for volumes
+                  type: object
+                  properties:
+                    enabled:
+                      type: boolean
+                      default: true
+                    storageClassName:
+                      type: string
+                    accessMode:
+                      type: string
+                      default: ReadWriteOnce
+                    anylog:
+                      type: object
+                      properties:
+                        size:
+                          type: string
+                          default: 5Gi
+                    blockchain:
+                      type: object
+                      properties:
+                        size:
+                          type: string
+                          default: 1Gi
+                    data:
+                      type: object
+                      properties:
+                        size:
+                          type: string
+                          default: 10Gi
+                    scripts:
+                      type: object
+                      properties:
+                        size:
+                          type: string
+                          default: 1Gi
+                resources:
+                  description: Resources defines compute resources for the container
+                  type: object
+                  properties:
+                    limits:
+                      type: object
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                    requests:
+                      type: object
+                      additionalProperties:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                nodeConfigs:
+                  description: NodeConfigs contains EdgeLake node configuration
+                  type: object
+                  properties:
+                    directories:
+                      type: object
+                      properties:
+                        anylogPath:
+                          type: string
+                          default: /app
+                        localScripts:
+                          type: string
+                          default: /app/deployment-scripts/node-deployment
+                        testDir:
+                          type: string
+                          default: /app/deployment-scripts/tests
+                    general:
+                      type: object
+                      properties:
+                        licenseKey:
+                          type: string
+                        nodeType:
+                          type: string
+                          enum: [master, operator, query]
+                          default: operator
+                        nodeName:
+                          type: string
+                        companyName:
+                          type: string
+                          default: New Company
+                        disableCLI:
+                          type: boolean
+                          default: false
+                        remoteCLI:
+                          type: boolean
+                          default: false
+                    geolocation:
+                      type: object
+                      properties:
+                        location:
+                          type: string
+                        country:
+                          type: string
+                        state:
+                          type: string
+                        city:
+                          type: string
+                    networking:
+                      type: object
+                      properties:
+                        overlayIP:
+                          type: string
+                        anylogServerPort:
+                          type: integer
+                          default: 32148
+                        anylogRESTPort:
+                          type: integer
+                          default: 32149
+                        anylogBrokerPort:
+                          type: integer
+                        tcpBind:
+                          type: boolean
+                          default: false
+                        restBind:
+                          type: boolean
+                          default: false
+                        brokerBind:
+                          type: boolean
+                          default: false
+                        configName:
+                          type: string
+                        nicType:
+                          type: string
+                        tcpThreads:
+                          type: integer
+                          default: 6
+                        restTimeout:
+                          type: integer
+                          default: 30
+                        restThreads:
+                          type: integer
+                          default: 6
+                        brokerThreads:
+                          type: integer
+                          default: 6
+                    database:
+                      type: object
+                      properties:
+                        dbType:
+                          type: string
+                          enum: [sqlite, psql]
+                          default: sqlite
+                        dbUser:
+                          type: string
+                        dbPasswd:
+                          type: string
+                        dbIP:
+                          type: string
+                          default: "127.0.0.1"
+                        dbPort:
+                          type: integer
+                          default: 5432
+                        autocommit:
+                          type: boolean
+                          default: false
+                        enableNoSQL:
+                          type: boolean
+                          default: false
+                        systemQuery:
+                          type: boolean
+                          default: false
+                        memory:
+                          type: boolean
+                          default: false
+                        nosqlType:
+                          type: string
+                          default: mongo
+                        nosqlUser:
+                          type: string
+                        nosqlPasswd:
+                          type: string
+                        nosqlIP:
+                          type: string
+                          default: "127.0.0.1"
+                        nosqlPort:
+                          type: integer
+                          default: 27017
+                        blobsDBMS:
+                          type: boolean
+                          default: false
+                        blobsReuse:
+                          type: boolean
+                          default: true
+                    blockchain:
+                      type: object
+                      properties:
+                        ledgerConn:
+                          type: string
+                          default: "127.0.0.1:32048"
+                        syncTime:
+                          type: string
+                          default: "30 second"
+                        blockchainSync:
+                          type: string
+                          default: "30 second"
+                        blockchainSource:
+                          type: string
+                          enum: [master, ethereum, hyperledger]
+                          default: master
+                        blockchainDestination:
+                          type: string
+                          enum: [file, dbms]
+                          default: file
+                    operator:
+                      type: object
+                      properties:
+                        clusterName:
+                          type: string
+                          default: new-company-cluster1
+                        defaultDBMS:
+                          type: string
+                          default: new_company
+                        member:
+                          type: string
+                        enableHA:
+                          type: boolean
+                          default: false
+                        startDate:
+                          type: integer
+                          default: 30
+                        operatorThreads:
+                          type: integer
+                          default: 3
+                        enablePartitions:
+                          type: boolean
+                          default: true
+                        tableName:
+                          type: string
+                          default: "*"
+                        partitionColumn:
+                          type: string
+                          default: insert_timestamp
+                        partitionInterval:
+                          type: string
+                          default: "14 days"
+                        partitionKeep:
+                          type: integer
+                          default: 3
+                        partitionSync:
+                          type: string
+                          default: "1 day"
+                    mqtt:
+                      type: object
+                      properties:
+                        enableMQTT:
+                          type: boolean
+                          default: false
+                        mqttBroker:
+                          type: string
+                        mqttPort:
+                          type: integer
+                          default: 1883
+                        mqttUser:
+                          type: string
+                        mqttPasswd:
+                          type: string
+                        mqttLog:
+                          type: boolean
+                          default: false
+                        msgTopic:
+                          type: string
+                        msgDBMS:
+                          type: string
+                          default: new_company
+                        msgTable:
+                          type: string
+                          default: "bring [table]"
+                        msgTimestampColumn:
+                          type: string
+                          default: "bring [timestamp]"
+                        msgValueColumn:
+                          type: string
+                          default: "bring [value]"
+                        msgValueColumnType:
+                          type: string
+                          default: float
+                    opcua:
+                      type: object
+                      properties:
+                        enableOPCUA:
+                          type: boolean
+                          default: false
+                        opcuaURL:
+                          type: string
+                        opcuaNode:
+                          type: string
+                        opcuaFrequency:
+                          type: string
+                    etherip:
+                      type: object
+                      properties:
+                        enableEtherIP:
+                          type: boolean
+                          default: false
+                        simulatorMode:
+                          type: boolean
+                          default: false
+                        etheripURL:
+                          type: string
+                        etheripFrequency:
+                          type: string
+                    aggregations:
+                      type: object
+                      properties:
+                        enableAggregations:
+                          type: boolean
+                          default: false
+                        aggregationTimeColumn:
+                          type: string
+                          default: insert_timestamp
+                        aggregationValueColumn:
+                          type: string
+                          default: value
+                    monitoring:
+                      type: object
+                      properties:
+                        monitorNodes:
+                          type: boolean
+                          default: false
+                        storeMonitoring:
+                          type: boolean
+                          default: false
+                        syslogMonitoring:
+                          type: boolean
+                          default: false
+                    mcp:
+                      type: object
+                      properties:
+                        mcpAutostart:
+                          type: boolean
+                          default: false
+                    advanced:
+                      type: object
+                      properties:
+                        deployLocalScript:
+                          type: boolean
+                          default: false
+                        debugMode:
+                          type: boolean
+                          default: false
+                        compressFile:
+                          type: boolean
+                          default: true
+                        queryPool:
+                          type: integer
+                          default: 6
+                        writeImmediate:
+                          type: boolean
+                          default: false
+                        thresholdTime:
+                          type: string
+                          default: "60 seconds"
+                        thresholdVolume:
+                          type: string
+                          default: "100KB"
+                    nebula:
+                      type: object
+                      properties:
+                        enableNebula:
+                          type: boolean
+                          default: false
+                        nebulaNewKeys:
+                          type: boolean
+                          default: false
+                        isLighthouse:
+                          type: boolean
+                          default: false
+                        cidrOverlayAddress:
+                          type: string
+                        lighthouseIP:
+                          type: string
+                        lighthouseNodeIP:
+                          type: string
+            status:
+              description: EdgeLakeOperatorStatus defines the observed state of EdgeLakeOperator
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                    required:
+                      - type
+                      - status
+                phase:
+                  type: string
+                observedGeneration:
+                  type: integer
+                  format: int64
+                ready:
+                  type: boolean
+                deploymentName:
+                  type: string
+                serviceName:
+                  type: string
+                configMapName:
+                  type: string

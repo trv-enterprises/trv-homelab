@@ -1,0 +1,17 @@
+---
+# Weather Poller Deployment Playbook
+#
+# Secrets are loaded from Ansible Vault (group_vars/all/vault.yml)
+#
+# Deploy:
+#   ansible-playbook playbooks/weather-poller-deploy.yml
+#
+# Override settings:
+#   ansible-playbook playbooks/weather-poller-deploy.yml -e "poll_interval=10m"
+
+- name: Deploy Weather Poller
+  hosts: services
+  become: false
+
+  roles:
+    - weather-poller

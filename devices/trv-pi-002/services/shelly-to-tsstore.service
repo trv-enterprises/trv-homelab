@@ -1,0 +1,23 @@
+[Unit]
+Description=Shelly Power Monitor to TSStore
+After=tsstore.service
+Requires=tsstore.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/<user>/tsstore/scripts
+ExecStart=/usr/bin/python3 -u /home/<user>/tsstore/scripts/shelly-to-tsstore.py
+Restart=always
+RestartSec=10
+
+# Shelly device configuration
+Environment=SHELLY_HOST=<cam-driveway-lan-ip>0
+Environment=SHELLY_SWITCH_ID=0
+Environment=SAMPLE_INTERVAL=10
+
+# tsstore configuration
+Environment=TSSTORE_SOCKET=/home/<user>/run/tsstore.sock
+EnvironmentFile=/home/<user>/.config/tsstore/shelly-plug-001.env
+
+[Install]
+WantedBy=default.target

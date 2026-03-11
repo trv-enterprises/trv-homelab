@@ -1,0 +1,17 @@
+caseta:
+  bridge_host: "<caseta-lan-ip>"           # Lutron Caseta L-BDG2
+  cert_dir: "/etc/caseta-bridge/certs"   # ca.crt, client.crt, client.key
+
+mqtt:
+  broker: "localhost"                    # Co-located with Mosquitto on services LXC
+  port: 1883
+  client_id: "caseta-bridge"
+
+topic_prefix: "caseta"                   # Publishes to caseta/<device_name>
+
+# Optional: human-friendly device name overrides
+# Maps Lutron device ID (string) to custom topic-safe name.
+# By default, uses Lutron's device names from the bridge (sanitized).
+device_names:
+  # "2": "kitchen_lights"
+  # "5": "living_room_dimmer"

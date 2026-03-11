@@ -1,0 +1,20 @@
+# ts-store Local Makefile (with environment-specific settings)
+# This file contains settings specific to your's environment
+# Copy to ts-store repo as .env or source before running make
+
+# Artifactory settings
+ARTIFACTORY_URL = http://<hub-tailscale-ip>:8081/artifactory
+ARTIFACTORY_REPO = trve-repo-local
+ARTIFACTORY_PATH = ts-store
+ARTIFACTORY_USER = admin
+# ARTIFACTORY_PASS should be set in environment
+
+# Pi deployment
+PI_HOST = <user>@<pi-001-tailscale-ip>
+PI_BINARY_PATH = /home/<user>/bin/tsstore
+
+# Usage:
+#   From ts-store directory:
+#   1. cp ../utilities/tsstore/.env .env
+#   2. make build
+#   3. make deploy-pi (requires .env)

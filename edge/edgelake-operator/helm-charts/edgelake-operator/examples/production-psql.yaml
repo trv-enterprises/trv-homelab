@@ -1,0 +1,87 @@
+# Production EdgeLake Operator with PostgreSQL
+# This configuration is suitable for production deployments with high data volume
+
+metadata:
+  namespace: edgelake-prod
+  app_name: operator-prod-1
+  service_type: NodePort
+
+image:
+  repository: anylogco/edgelake-network
+  tag: "1.3.2500"
+  pull_policy: IfNotPresent
+
+persistence:
+  enabled: true
+  storageClassName: "fast-ssd"  # Use your storage class
+  anylog:
+    size: 10Gi
+  blockchain:
+    size: 2Gi
+  data:
+    size: 100Gi
+  scripts:
+    size: 1Gi
+
+resources:
+  limits:
+    cpu: "4000m"
+    memory: "8Gi"
+  requests:
+    cpu: "1000m"
+    memory: "2Gi"
+
+node_configs:
+  general:
+    NODE_NAME: "operator-prod-1"
+    COMPANY_NAME: "Your Company"
+
+  geolocation:
+    LOCATION: "37.7749,-122.4194"
+    COUNTRY: "USA"
+    STATE: "California"
+    CITY: "San Francisco"
+
+  networking:
+    ANYLOG_SERVER_PORT: 32148
+    ANYLOG_REST_PORT: 32149
+    TCP_THREADS: 8
+    REST_THREADS: 8
+
+  database:
+    DB_TYPE: psql
+    DB_USER: edgelake
+    DB_PASSWD: "your-secure-password"  # Use Kubernetes secrets in production
+    DB_IP: postgres-service.database.svc.cluster.local
+    DB_PORT: 5432
+    AUTOCOMMIT: false
+    SYSTEM_QUERY: true
+    MEMORY: true
+
+  blockchain:
+    LEDGER_CONN: "master-node.edgelake.svc.cluster.local:32048"
+    BLOCKCHAIN_SOURCE: master
+    BLOCKCHAIN_SYNC: "30 second"
+
+  operator:
+    CLUSTER_NAME: production-cluster
+    DEFAULT_DBMS: production_data
+    ENABLE_PARTITIONS: true
+    TABLE_NAME: "*"
+    PARTITION_COLUMN: insert_timestamp
+    PARTITION_INTERVAL: "7 days"
+    PARTITION_KEEP: 4
+    PARTITION_SYNC: "1 day"
+    ENABLE_HA: true
+    OPERATOR_THREADS: 6
+
+  monitoring:
+    MONITOR_NODES: true
+    STORE_MONITORING: true
+
+  advanced:
+    COMPRESS_FILE: true
+    QUERY_POOL: 12
+    WRITE_IMMEDIATE: false
+    THRESHOLD_TIME: "30 seconds"
+    THRESHOLD_VOLUME: "1MB"

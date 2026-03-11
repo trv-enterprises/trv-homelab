@@ -1,0 +1,16 @@
+[Unit]
+Description=Journal Log Collector for ts-store
+After=tsstore.service
+Requires=tsstore.service
+
+[Service]
+Type=simple
+User=root
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/<user>/bin/journal-logs -socket /var/run/tsstore/tsstore.sock -store journal-logs
+Restart=always
+RestartSec=10
+Environment=TSSTORE_API_KEY=CHANGEME
+
+[Install]
+WantedBy=multi-user.target

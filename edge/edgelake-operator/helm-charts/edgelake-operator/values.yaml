@@ -1,0 +1,289 @@
+# Default values for edgelake-operator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+metadata:
+  # Kubernetes namespace
+  namespace: default
+  # Hostname for deployment
+  hostname: edgelake-operator
+  # Deployment application name / Name of the EdgeLake instance
+  app_name: edgelake-operator
+  # Service name
+  service_name: edgelake-operator-service
+  # ConfigMap name
+  configmap_name: edgelake-operator-configmap
+  # Node selector for running on specific nodes (optional)
+  # Example: "node-role.kubernetes.io/worker: true"
+  node_selector: ""
+  # Service type: ClusterIP, NodePort, or LoadBalancer
+  service_type: NodePort
+
+image:
+  # Docker image pull secret name (required for private registries)
+  secret_name: ""
+  # Docker image repository
+  repository: anylogco/edgelake-network
+  # Image tag - corresponds to EdgeLake version
+  tag: "1.3.2500"
+  # Image pull policy
+  pull_policy: IfNotPresent
+
+# Persistent volume settings
+persistence:
+  # Enable persistent volumes
+  enabled: true
+  # Storage class name (leave empty for default)
+  storageClassName: ""
+  # Access mode
+  accessMode: ReadWriteOnce
+  # Size of volumes
+  anylog:
+    size: 5Gi
+  blockchain:
+    size: 1Gi
+  data:
+    size: 10Gi
+  scripts:
+    size: 1Gi
+
+# Resource limits and requests
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+# Node configuration
+node_configs:
+  directories:
+    # EdgeLake root path
+    ANYLOG_PATH: /app
+    # Local scripts directory
+    LOCAL_SCRIPTS: /app/deployment-scripts/node-deployment
+    # Test directory
+    TEST_DIR: /app/deployment-scripts/tests
+
+  general:
+    # EdgeLake license key (if required)
+    LICENSE_KEY: ""
+    # Node type - must be 'operator' for this chart
+    NODE_TYPE: operator
+    # Name of the EdgeLake instance (will default to metadata.app_name)
+    NODE_NAME: ""
+    # Company/organization name
+    COMPANY_NAME: "New Company"
+    # Disable CLI interface
+    DISABLE_CLI: false
+    # Enable remote CLI
+    REMOTE_CLI: false
+
+  geolocation:
+    # GPS coordinates (e.g., "37.7749,-122.4194")
+    LOCATION: ""
+    # Country
+    COUNTRY: ""
+    # State/Province
+    STATE: ""
+    # City
+    CITY: ""
+
+  networking:
+    # Overlay IP address (for VPN/Tailscale/Nebula)
+    OVERLAY_IP: ""
+    # TCP server port
+    ANYLOG_SERVER_PORT: 32148
+    # REST API port
+    ANYLOG_REST_PORT: 32149
+    # MQTT broker port (optional)
+    ANYLOG_BROKER_PORT: ""
+    # Bind to specific IP
+    TCP_BIND: false
+    REST_BIND: false
+    BROKER_BIND: false
+
+    # Advanced networking
+    # Network configuration policy name
+    CONFIG_NAME: ""
+    # NIC type
+    NIC_TYPE: ""
+    # TCP threads
+    TCP_THREADS: 6
+    # REST timeout in seconds
+    REST_TIMEOUT: 30
+    # REST threads
+    REST_THREADS: 6
+    # Broker threads
+    BROKER_THREADS: 6
+
+  database:
+    # Database type: sqlite or psql
+    DB_TYPE: sqlite
+    # PostgreSQL username (if using psql)
+    DB_USER: ""
+    # PostgreSQL password (if using psql)
+    DB_PASSWD: ""
+    # Database host
+    DB_IP: 127.0.0.1
+    # Database port
+    DB_PORT: 5432
+    # Enable autocommit
+    AUTOCOMMIT: false
+    # Enable NoSQL database
+    ENABLE_NOSQL: false
+    # Enable system_query database
+    SYSTEM_QUERY: false
+    # Use in-memory SQLite for system_query
+    MEMORY: false
+
+    # NoSQL configuration (MongoDB)
+    NOSQL_TYPE: mongo
+    NOSQL_USER: ""
+    NOSQL_PASSWD: ""
+    NOSQL_IP: 127.0.0.1
+    NOSQL_PORT: 27017
+    # Store blobs in database
+    BLOBS_DBMS: false
+    # Reuse existing blobs
+    BLOBS_REUSE: true
+
+  blockchain:
+    # Blockchain/Master node connection (format: ip:port)
+    LEDGER_CONN: "127.0.0.1:32048"
+    # Blockchain sync frequency
+    SYNC_TIME: "30 second"
+    # Blockchain sync interval (alternative format)
+    BLOCKCHAIN_SYNC: "30 second"
+    # Blockchain source: master, ethereum, hyperledger
+    BLOCKCHAIN_SOURCE: master
+    # Blockchain destination: file, dbms
+    BLOCKCHAIN_DESTINATION: file
+
+  operator:
+    # Cluster name
+    CLUSTER_NAME: new-company-cluster1
+    # Default logical database name
+    DEFAULT_DBMS: new_company
+    # Operator member ID
+    MEMBER: ""
+    # Enable High Availability
+    ENABLE_HA: false
+    # Days back to sync
+    START_DATE: 30
+    # Number of operator threads
+    OPERATOR_THREADS: 3
+
+    # Partitioning configuration
+    # Enable partitions
+    ENABLE_PARTITIONS: true
+    # Tables to partition (* for all)
+    TABLE_NAME: "*"
+    # Partition column
+    PARTITION_COLUMN: insert_timestamp
+    # Partition interval
+    PARTITION_INTERVAL: "14 days"
+    # Number of partitions to keep
+    PARTITION_KEEP: 3
+    # Partition sync frequency
+    PARTITION_SYNC: "1 day"
+
+  mqtt:
+    # Enable MQTT client
+    ENABLE_MQTT: false
+    # MQTT broker address
+    MQTT_BROKER: ""
+    # MQTT broker port
+    MQTT_PORT: 1883
+    # MQTT username
+    MQTT_USER: ""
+    # MQTT password
+    MQTT_PASSWD: ""
+    # Enable MQTT logging
+    MQTT_LOG: false
+
+    # Message processing
+    # MQTT topic to subscribe to
+    MSG_TOPIC: ""
+    # Target database
+    MSG_DBMS: new_company
+    # Target table (use "bring [table]" for dynamic)
+    MSG_TABLE: "bring [table]"
+    # Timestamp column
+    MSG_TIMESTAMP_COLUMN: "bring [timestamp]"
+    # Value column
+    MSG_VALUE_COLUMN: "bring [value]"
+    # Value column type
+    MSG_VALUE_COLUMN_TYPE: float
+
+  opcua:
+    # Enable OPC-UA client
+    ENABLE_OPCUA: false
+    # OPC-UA server URL
+    OPCUA_URL: ""
+    # OPC-UA node path
+    OPCUA_NODE: ""
+    # Polling frequency
+    OPCUA_FREQUENCY: ""
+
+  etherip:
+    # Enable EtherNet/IP (for Allen-Bradley PLCs)
+    ENABLE_ETHERIP: false
+    # Enable simulator mode for testing
+    SIMULATOR_MODE: false
+    # PLC IP address
+    ETHERIP_URL: ""
+    # Polling frequency
+    ETHERIP_FREQUENCY: ""
+
+  aggregations:
+    # Enable data aggregations
+    ENABLE_AGGREGATIONS: false
+    # Timestamp column for aggregation
+    AGGREGATION_TIME_COLUMN: insert_timestamp
+    # Value column for aggregation
+    AGGREGATION_VALUE_COLUMN: value
+
+  monitoring:
+    # Enable node monitoring
+    MONITOR_NODES: false
+    # Store monitoring data on operator
+    STORE_MONITORING: false
+    # Accept syslog data
+    SYSLOG_MONITORING: false
+
+  mcp:
+    # Auto-start MCP server for AI integration
+    MCP_AUTOSTART: false
+
+  advanced:
+    # Deploy custom local script
+    DEPLOY_LOCAL_SCRIPT: false
+    # Run in debug mode
+    DEBUG_MODE: false
+    # Compress backup files
+    COMPRESS_FILE: true
+    # Number of parallel queries
+    QUERY_POOL: 6
+    # Write data immediately (vs buffering)
+    WRITE_IMMEDIATE: false
+    # Buffer threshold time
+    THRESHOLD_TIME: "60 seconds"
+    # Buffer threshold volume
+    THRESHOLD_VOLUME: "100KB"
+
+  # Nebula VPN configuration (optional)
+  nebula:
+    # Enable Nebula VPN
+    ENABLE_NEBULA: false
+    # Generate new Nebula keys
+    NEBULA_NEW_KEYS: false
+    # Is this node a lighthouse
+    IS_LIGHTHOUSE: false
+    # CIDR overlay address (e.g., "10.10.1.15/24")
+    CIDR_OVERLAY_ADDRESS: ""
+    # Lighthouse IP
+    LIGHTHOUSE_IP: ""
+    # Lighthouse node physical IP
+    LIGHTHOUSE_NODE_IP: ""

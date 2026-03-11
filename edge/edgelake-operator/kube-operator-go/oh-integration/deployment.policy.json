@@ -1,0 +1,21 @@
+{
+  "label": "EdgeLake Kubernetes Operator Deployment Policy",
+  "description": "Deploys EdgeLake operator to Kubernetes edge clusters via Open Horizon. Node-specific configuration (NODE_NAME, OVERLAY_IP, CLUSTER_NAME, ports) is provided by each cluster's node policy.",
+  "service": {
+    "name": "edgelake-kube-operator",
+    "org": "$HZN_ORG_ID",
+    "arch": "$ARCH",
+    "serviceVersions": [
+      {
+        "version": "$SERVICE_VERSION",
+        "priority": {}
+      }
+    ]
+  },
+  "properties": [],
+  "constraints": [
+    "purpose == edgelake-kubernetes",
+    "openhorizon.kubernetesEnabled == true"
+  ],
+  "userInput": []
+}

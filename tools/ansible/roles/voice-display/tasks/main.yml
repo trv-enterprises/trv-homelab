@@ -1,0 +1,165 @@
+---
+# Voice Display deployment tasks
+
+- name: Create deployment directory
+  ansible.builtin.file:
+    path: "{{ voice_display_deploy_dir }}"
+    state: directory
+    owner: "{{ voice_display_user }}"
+    group: "{{ voice_display_group }}"
+    mode: '0755'
+  become: true
+
+# Build display app locally before sync
+- name: Build display app locally
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: npm run build
+    chdir: "{{ voice_display_src_dir }}/display"
+  register: build_result
+  changed_when: true
+
+# Sync display app
+- name: Sync display app
+  ansible.posix.synchronize:
+    src: "{{ voice_display_src_dir }}/display/"
+    dest: "{{ voice_display_deploy_dir }}/display/"
+    delete: true
+    rsync_opts:
+      - "--exclude=node_modules"
+  notify: Restart voice-display-ui
+
+# Sync voice pipeline
+- name: Sync voice pipeline
+  ansible.posix.synchronize:
+    src: "{{ voice_display_src_dir }}/voice/"
+    dest: "{{ voice_display_deploy_dir }}/voice/"
+    delete: true
+    rsync_opts:
+      - "--exclude=venv"
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+  notify: Restart voice-display-voice
+
+# Sync systemd services
+- name: Sync systemd services
+  ansible.posix.synchronize:
+    src: "{{ voice_display_src_dir }}/systemd/"
+    dest: "{{ voice_display_deploy_dir }}/systemd/"
+    delete: true
+
+# Install Node.js dependencies
+- name: Check if node_modules exists
+  ansible.builtin.stat:
+    path: "{{ voice_display_deploy_dir }}/display/node_modules"
+  register: node_modules
+
+- name: Install display app dependencies
+  ansible.builtin.command:
+    cmd: npm install --production
+    chdir: "{{ voice_display_deploy_dir }}/display"
+  when: not node_modules.stat.exists
+  register: npm_install
+  changed_when: npm_install.rc == 0
+
+# Set up Python virtual environment
+- name: Check if venv exists
+  ansible.builtin.stat:
+    path: "{{ voice_display_deploy_dir }}/voice/venv"
+  register: venv_dir
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: python3 -m venv venv
+    chdir: "{{ voice_display_deploy_dir }}/voice"
+  when: not venv_dir.stat.exists
+
+- name: Install Python dependencies
+  ansible.builtin.pip:
+    requirements: "{{ voice_display_deploy_dir }}/voice/requirements.txt"
+    virtualenv: "{{ voice_display_deploy_dir }}/voice/venv"
+  notify: Restart voice-display-voice
+
+# Create environment file for display
+- name: Create display environment file
+  ansible.builtin.copy:
+    content: |
+      VITE_API_URL={{ voice_display_api_url }}
+    dest: "{{ voice_display_deploy_dir }}/display/.env"
+    owner: "{{ voice_display_user }}"
+    group: "{{ voice_display_group }}"
+    mode: '0644'
+  notify: Restart voice-display-ui
+
+# Deploy systemd services
+- name: Deploy voice-display-ui service
+  ansible.builtin.template:
+    src: voice-display-ui.service.j2
+    dest: /etc/systemd/system/voice-display-ui.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart voice-display-ui
+
+- name: Deploy voice-display-voice service
+  ansible.builtin.template:
+    src: voice-display-voice.service.j2
+    dest: /etc/systemd/system/voice-display-voice.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart voice-display-voice
+
+# Enable and start services
+- name: Enable voice-display-ui service
+  ansible.builtin.systemd:
+    name: voice-display-ui
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Start voice-display-ui service
+  ansible.builtin.systemd:
+    name: voice-display-ui
+    state: started
+  become: true
+
+# Voice service is optional - may need ANTHROPIC_API_KEY
+- name: Check if ANTHROPIC_API_KEY is set
+  ansible.builtin.set_fact:
+    voice_pipeline_enabled: "{{ anthropic_api_key is defined and anthropic_api_key != '' }}"
+
+- name: Enable voice-display-voice service
+  ansible.builtin.systemd:
+    name: voice-display-voice
+    enabled: "{{ voice_pipeline_enabled }}"
+    daemon_reload: true
+  become: true
+  when: voice_pipeline_enabled
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      Voice Display deployed successfully!
+
+      Display UI:
+        URL: http://{{ ansible_host }}:{{ voice_display_port }}
+        Service: voice-display-ui
+
+      Voice Pipeline:
+        Enabled: {{ voice_pipeline_enabled }}
+        Service: voice-display-voice
+        {% if not voice_pipeline_enabled %}
+        Note: Set anthropic_api_key to enable voice pipeline
+        {% endif %}
+
+      Commands:
+        sudo systemctl status voice-display-ui
+        sudo systemctl status voice-display-voice
+        journalctl -u voice-display-ui -f

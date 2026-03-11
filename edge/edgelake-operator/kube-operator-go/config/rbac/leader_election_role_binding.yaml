@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: edgelake-operator-leader-election-rolebinding
+  namespace: edgelake-operator-system
+  labels:
+    app.kubernetes.io/name: edgelake-operator
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: edgelake-operator-leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: edgelake-operator-controller-manager
+    namespace: edgelake-operator-system

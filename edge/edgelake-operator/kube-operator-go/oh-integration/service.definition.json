@@ -1,0 +1,108 @@
+{
+  "org": "$HZN_ORG_ID",
+  "label": "EdgeLake Kubernetes Operator for $ARCH",
+  "description": "EdgeLake Operator deployed to Kubernetes edge clusters via Open Horizon",
+  "documentation": "https://github.com/EdgeLake/EdgeLake",
+  "url": "edgelake-kube-operator",
+  "version": "$SERVICE_VERSION",
+  "arch": "$ARCH",
+  "public": true,
+  "sharable": "singleton",
+  "requiredServices": [],
+  "userInput": [
+    {
+      "name": "EDGELAKE_NODE_NAME",
+      "label": "Name of the EdgeLake instance (set in node policy)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "EDGELAKE_OVERLAY_IP",
+      "label": "Overlay IP address for node communication (set in node policy)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "EDGELAKE_SERVER_PORT",
+      "label": "Port address used by EdgeLake's TCP protocol (set in node policy)",
+      "type": "int",
+      "defaultValue": "32148"
+    },
+    {
+      "name": "EDGELAKE_REST_PORT",
+      "label": "Port address used by EdgeLake's REST protocol (set in node policy)",
+      "type": "int",
+      "defaultValue": "32149"
+    },
+    {
+      "name": "EDGELAKE_CLUSTER_NAME",
+      "label": "Operator cluster name (set in node policy)",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "EDGELAKE_COMPANY_NAME",
+      "label": "Owner of the EdgeLake instance (network-wide)",
+      "type": "string",
+      "defaultValue": "New Company"
+    },
+    {
+      "name": "EDGELAKE_LEDGER_CONN",
+      "label": "TCP connection information for Master Node (network-wide)",
+      "type": "string",
+      "defaultValue": "<hub-tailscale-ip>:32048"
+    },
+    {
+      "name": "EDGELAKE_DB_TYPE",
+      "label": "Physical database type (network-wide)",
+      "type": "string",
+      "defaultValue": "sqlite"
+    },
+    {
+      "name": "EDGELAKE_DEFAULT_DBMS",
+      "label": "Default logical database name (network-wide)",
+      "type": "string",
+      "defaultValue": "production_data"
+    },
+    {
+      "name": "EDGELAKE_IMAGE_TAG",
+      "label": "EdgeLake container image tag (network-wide)",
+      "type": "string",
+      "defaultValue": "1.3.2500"
+    },
+    {
+      "name": "EDGELAKE_BROKER_PORT",
+      "label": "Port address used by EdgeLake's MQTT broker (optional)",
+      "type": "int",
+      "defaultValue": "0"
+    },
+    {
+      "name": "EDGELAKE_STORAGE_CLASS",
+      "label": "Kubernetes storage class for PVCs",
+      "type": "string",
+      "defaultValue": ""
+    },
+    {
+      "name": "EDGELAKE_SERVICE_TYPE",
+      "label": "Kubernetes service type (ClusterIP, NodePort, LoadBalancer)",
+      "type": "string",
+      "defaultValue": "NodePort"
+    },
+    {
+      "name": "EDGELAKE_ENABLE_MQTT",
+      "label": "Enable MQTT data ingestion",
+      "type": "bool",
+      "defaultValue": "false"
+    },
+    {
+      "name": "EDGELAKE_MQTT_BROKER",
+      "label": "MQTT broker address (if enabled)",
+      "type": "string",
+      "defaultValue": ""
+    }
+  ],
+  "clusterDeployment": {
+    "operatorYamlArchive": "operator-yamls.tar.gz"
+  },
+  "clusterDeploymentSignature": ""
+}

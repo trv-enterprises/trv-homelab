@@ -1,0 +1,62 @@
+---
+# Server Report Playbook
+# Generates comprehensive inventory and health reports for all hosts
+
+- name: Generate Server Reports
+  hosts: all
+  gather_facts: true
+  become: false
+  serial: 5  # Limit parallel execution
+
+  vars:
+    report_base: "{{ playbook_dir }}/../../../svr-rpts"
+
+  pre_tasks:
+    - name: Set shared timestamp
+      ansible.builtin.set_fact:
+        shared_report_timestamp: "{{ lookup('pipe', 'date +%Y-%m-%d_%H%M%S') }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Set report directory fact
+      ansible.builtin.set_fact:
+        report_dir: "{{ report_base }}/{{ shared_report_timestamp }}"
+      run_once: true
+
+    - name: Create report directory
+      ansible.builtin.file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Propagate report_dir to all hosts
+      ansible.builtin.set_fact:
+        report_dir: "{{ hostvars[ansible_play_hosts[0]].report_dir }}"
+
+  roles:
+    - server-report
+
+  post_tasks:
+    - name: Generate fleet inventory summary
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/server-report/templates/inventory-summary.md.j2"
+        dest: "{{ report_dir }}/00-INVENTORY.md"
+        mode: '0644'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Create latest symlink
+      ansible.builtin.file:
+        src: "{{ report_dir | basename }}"
+        dest: "{{ report_base }}/latest"
+        state: link
+        force: true
+      delegate_to: localhost
+      run_once: true
+
+    - name: Display report location
+      ansible.builtin.debug:
+        msg: "Reports generated at: {{ report_dir }}"
+      run_once: true

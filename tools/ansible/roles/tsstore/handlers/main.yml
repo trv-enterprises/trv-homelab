@@ -1,0 +1,25 @@
+---
+# tsstore handlers
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart tsstore
+  ansible.builtin.systemd:
+    name: tsstore
+    state: restarted
+  become: true
+
+- name: Restart system-stats
+  ansible.builtin.systemd:
+    name: system-stats
+    state: restarted
+  become: true
+
+- name: Restart journal-logs
+  ansible.builtin.systemd:
+    name: journal-logs
+    state: restarted
+  become: true

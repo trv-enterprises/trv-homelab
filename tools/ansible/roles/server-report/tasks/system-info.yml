@@ -1,0 +1,39 @@
+---
+# Gather system information
+
+- name: Get OS release info
+  ansible.builtin.slurp:
+    src: /etc/os-release
+  register: os_release_raw
+  ignore_errors: true
+
+- name: Parse OS release
+  ansible.builtin.set_fact:
+    os_pretty_name: "{{ (os_release_raw.content | b64decode | regex_search('PRETTY_NAME=\"([^\"]+)\"', '\\1'))[0] | default('Unknown') }}"
+  when: os_release_raw is succeeded
+
+- name: Get load averages
+  ansible.builtin.slurp:
+    src: /proc/loadavg
+  register: loadavg_raw
+
+- name: Parse load averages
+  ansible.builtin.set_fact:
+    load_avg: "{{ (loadavg_raw.content | b64decode).split()[:3] | join(' ') }}"
+
+- name: Calculate memory percentage
+  ansible.builtin.set_fact:
+    mem_used_mb: "{{ ansible_memtotal_mb - ansible_memfree_mb }}"
+    mem_pct: "{{ ((ansible_memtotal_mb - ansible_memfree_mb) / ansible_memtotal_mb * 100) | round(1) }}"
+
+- name: Get disk usage details
+  ansible.builtin.shell: |
+    df -h | grep -E '^/dev/' | awk '{print $1"|"$2"|"$3"|"$4"|"$5"|"$6}'
+  register: disk_usage_raw
+  changed_when: false
+
+- name: Parse disk usage
+  ansible.builtin.set_fact:
+    disk_mounts: "{{ disk_mounts | default([]) + [{'filesystem': item.split('|')[0], 'size': item.split('|')[1], 'used': item.split('|')[2], 'avail': item.split('|')[3], 'pct': item.split('|')[4], 'mount': item.split('|')[5]}] }}"
+  loop: "{{ disk_usage_raw.stdout_lines }}"
+  when: item | length > 0

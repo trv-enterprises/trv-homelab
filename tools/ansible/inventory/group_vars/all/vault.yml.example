@@ -1,0 +1,7 @@
+# Ansible Vault - encrypt with: ansible-vault encrypt vault.yml
+# Requires ~/.vault_pass file with the vault password
+
+anthropic_api_key: "sk-ant-..."
+ghcr_token: "ghp_..."
+tsstore_admin_key: "your-admin-key"
+visual_crossing_key: "your-visual-crossing-api-key"

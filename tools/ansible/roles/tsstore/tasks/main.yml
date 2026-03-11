@@ -1,0 +1,99 @@
+---
+# tsstore deployment tasks
+
+- name: Determine architecture
+  ansible.builtin.set_fact:
+    tsstore_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Create tsstore user
+  ansible.builtin.user:
+    name: "{{ tsstore_user }}"
+    system: false
+    create_home: true
+  become: true
+
+- name: Create directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0755'
+  loop:
+    - "{{ tsstore_data_dir }}"
+    - "{{ tsstore_run_dir }}"
+    - "{{ tsstore_config_dir }}"
+  become: true
+
+- name: Copy tsstore binary
+  ansible.builtin.copy:
+    src: "{{ tsstore_local_bin_path }}/tsstore-linux-{{ tsstore_arch }}"
+    dest: "{{ tsstore_bin_dir }}/tsstore"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  notify: Restart tsstore
+
+- name: Create tsstore environment file
+  ansible.builtin.copy:
+    content: |
+      TSSTORE_ADMIN_KEY={{ tsstore_admin_key }}
+      TSSTORE_DATA_PATH={{ tsstore_data_dir }}
+      TSSTORE_PORT={{ tsstore_port }}
+      TSSTORE_SOCKET_PATH={{ tsstore_socket }}
+    dest: "{{ tsstore_config_dir }}/tsstore.env"
+    owner: root
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  become: true
+  notify: Restart tsstore
+
+- name: Create tsstore systemd service
+  ansible.builtin.template:
+    src: tsstore.service.j2
+    dest: /etc/systemd/system/tsstore.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart tsstore
+
+- name: Create tmpfiles.d config for run directory
+  ansible.builtin.copy:
+    content: |
+      d {{ tsstore_run_dir }} 0755 {{ tsstore_user }} {{ tsstore_group }} -
+    dest: /etc/tmpfiles.d/tsstore.conf
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Ensure run directory exists
+  ansible.builtin.command:
+    cmd: systemd-tmpfiles --create /etc/tmpfiles.d/tsstore.conf
+  become: true
+  changed_when: false
+
+- name: Enable and start tsstore service
+  ansible.builtin.systemd:
+    name: tsstore
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: Wait for tsstore to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/health"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 10
+  delay: 2
+
+- name: Deploy collectors
+  ansible.builtin.include_tasks: collectors.yml
+  when: tsstore_collectors | length > 0

@@ -1,0 +1,32 @@
+services:
+  edgelake:
+    image: ${IMAGE}:${TAG}
+    pull_policy: never  # Don't auto-pull, use 'make pull' to get images from registry
+    restart: always
+    container_name: ${NODE_NAME}
+    stdin_open: true
+    tty: true
+    network_mode: host
+    env_file:
+      # Config files are loaded in order - later files override earlier ones
+      # Each deployment directory has its own configs/ folder
+      - ./configs/base_configs.env
+      - ./configs/advance_configs.env
+      - ./.env
+      # Optional: .env.local for machine-specific overrides (should be in .gitignore)
+      # - ./.env.local
+    volumes:
+      - anylog:/app/EdgeLake/anylog
+      - blockchain:/app/EdgeLake/blockchain
+      - data:/app/EdgeLake/data
+      - local-scripts:/app/deployment-scripts
+
+volumes:
+  anylog:
+    name: ${NODE_NAME}-anylog
+  blockchain:
+    name: ${NODE_NAME}-blockchain
+  data:
+    name: ${NODE_NAME}-data
+  local-scripts:
+    name: ${NODE_NAME}-local-scripts

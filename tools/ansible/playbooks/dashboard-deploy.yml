@@ -1,0 +1,17 @@
+---
+# Dashboard Deployment Playbook
+#
+# Secrets are loaded from Ansible Vault (group_vars/all/vault.yml)
+#
+# Deploy:
+#   ansible-playbook playbooks/dashboard-deploy.yml
+#
+# Deploy specific version:
+#   ansible-playbook playbooks/dashboard-deploy.yml -e "dashboard_version=0.3.1"
+
+- name: Deploy Dashboard
+  hosts: dashboard
+  become: false
+
+  roles:
+    - dashboard

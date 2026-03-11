@@ -1,0 +1,16 @@
+[Unit]
+Description=TSStore Time Series Database
+After=network.target
+
+[Service]
+Type=simple
+User=<user>
+WorkingDirectory=/home/<user>
+ExecStart=/home/<user>/bin/tsstore serve --data-path /home/<user>/data/tsstore --port 21080 --socket /var/run/tsstore/tsstore.sock
+Restart=always
+RestartSec=5
+Environment=TSSTORE_MODE=release
+Environment=TSSTORE_ADMIN_KEY=CHANGEME
+
+[Install]
+WantedBy=multi-user.target

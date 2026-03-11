@@ -1,0 +1,68 @@
+---
+# Dashboard deployment tasks
+
+- name: Validate required variables
+  ansible.builtin.fail:
+    msg: "anthropic_api_key is required. Pass via --extra-vars or set in vault."
+  when: anthropic_api_key is not defined or anthropic_api_key == ""
+
+- name: Validate GHCR token
+  ansible.builtin.fail:
+    msg: "ghcr_token is required for pulling from GitHub Container Registry. Pass via --extra-vars or set TOM_GH_TOKEN env var."
+  when: ghcr_token is not defined or ghcr_token == ""
+
+- name: Create deployment directory
+  ansible.builtin.file:
+    path: "{{ dashboard_deploy_dir }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: true
+
+- name: Login to GitHub Container Registry
+  ansible.builtin.shell:
+    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u <github-username> --password-stdin
+  register: docker_login
+  changed_when: false
+  no_log: true
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ dashboard_deploy_dir }}/docker-compose.yml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  register: compose_file
+
+- name: Pull latest images
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ dashboard_deploy_dir }}"
+  register: pull_result
+  changed_when: "'Downloaded' in pull_result.stderr or 'Pulled' in pull_result.stderr"
+
+- name: Start/update dashboard services
+  ansible.builtin.command:
+    cmd: docker compose up -d --remove-orphans
+    chdir: "{{ dashboard_deploy_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Wait for services to be healthy
+  ansible.builtin.command:
+    cmd: docker compose ps --format json
+    chdir: "{{ dashboard_deploy_dir }}"
+  register: compose_ps
+  until: "'unhealthy' not in compose_ps.stdout and 'starting' not in compose_ps.stdout"
+  retries: 12
+  delay: 10
+  changed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      Dashboard deployed successfully!
+      Version: {{ dashboard_version }}
+      URL: https://{{ ansible_host }}/ (or http://{{ lan_ip | default(ansible_host) }}/)

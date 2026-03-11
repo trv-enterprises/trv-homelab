@@ -1,0 +1,97 @@
+# Production EdgeLake Operator deployment with PostgreSQL
+# Full configuration for production environments
+apiVersion: edgelake.trv.io/v1alpha1
+kind: EdgeLakeOperator
+metadata:
+  name: edgelake-operator-prod
+  namespace: edgelake
+spec:
+  metadata:
+    hostname: edgelake-operator-prod
+    appName: edgelake-operator-prod
+    serviceName: edgelake-operator-prod-service
+    configMapName: edgelake-operator-prod-configmap
+    serviceType: LoadBalancer
+
+  image:
+    repository: anylogco/edgelake-network
+    tag: "1.3.2500"
+    pullPolicy: Always
+
+  persistence:
+    enabled: true
+    storageClassName: "standard"
+    accessMode: ReadWriteOnce
+    anylog:
+      size: 10Gi
+    blockchain:
+      size: 2Gi
+    data:
+      size: 50Gi
+    scripts:
+      size: 2Gi
+
+  resources:
+    limits:
+      cpu: "4000m"
+      memory: "8Gi"
+    requests:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  nodeConfigs:
+    general:
+      nodeType: operator
+      nodeName: edgelake-operator-prod
+      companyName: "Production Corp"
+      disableCLI: true
+      remoteCLI: true
+
+    geolocation:
+      country: "US"
+      state: "California"
+      city: "San Francisco"
+
+    networking:
+      anylogServerPort: 32148
+      anylogRESTPort: 32149
+      anylogBrokerPort: 32150
+      tcpThreads: 8
+      restThreads: 8
+
+    database:
+      dbType: psql
+      dbUser: edgelake
+      dbPasswd: your-secure-password
+      dbIP: postgres-service.edgelake.svc.cluster.local
+      dbPort: 5432
+      autocommit: true
+      systemQuery: true
+
+    blockchain:
+      ledgerConn: "master-node-ip:32048"
+      syncTime: "30 second"
+      blockchainSource: master
+      blockchainDestination: file
+
+    operator:
+      clusterName: production-cluster
+      defaultDBMS: production_data
+      enableHA: true
+      operatorThreads: 6
+      enablePartitions: true
+      tableName: "*"
+      partitionColumn: insert_timestamp
+      partitionInterval: "7 days"
+      partitionKeep: 4
+      partitionSync: "1 day"
+
+    monitoring:
+      monitorNodes: true
+      storeMonitoring: true
+
+    advanced:
+      compressFile: true
+      queryPool: 8
+      thresholdTime: "30 seconds"
+      thresholdVolume: "500KB"

@@ -1,0 +1,176 @@
+---
+# Our Kiosk Deployment Playbook
+#
+# Deploys the voice-controlled smart display to a kiosk device.
+# The display shows a clock by default and responds to voice commands
+# to switch views, show dashboards, set cooking timers, etc.
+#
+# Note: Jetson Nano has Python 3.6 which is too old for standard Ansible modules,
+# so we use gather_facts: false and raw/shell commands.
+# For Minisforum setup, use our-kiosk-setup-minisforum.yml instead.
+#
+# Deploy to Jetson (default):
+#   ansible-playbook playbooks/our-kiosk-deploy.yml
+#
+# Deploy to Minisforum:
+#   ansible-playbook playbooks/our-kiosk-deploy.yml -e kiosk_target=trv-kiosk-001
+#
+# Deploy with sudo password (for systemd service setup):
+#   ansible-playbook playbooks/our-kiosk-deploy.yml -K
+#
+# Deploy with systemd setup:
+#   ansible-playbook playbooks/our-kiosk-deploy.yml -K -e kiosk_target=trv-kiosk-001 --tags setup-systemd
+
+- name: Deploy Our Kiosk
+  hosts: "{{ kiosk_target | default('trv-jetson-nano') }}"
+  gather_facts: false
+  become: false
+
+  vars:
+    kiosk_deploy_dir: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/voice-display"
+    kiosk_src_dir: "{{ playbook_dir }}/../../../devices/our-kiosk"
+    kiosk_port: 5174
+    kiosk_api_url: "http://<dashboard-tailscale-ip>:3001"
+    kiosk_websocket_port: 8765
+    kiosk_audio_device: "plughw:2,0"
+    # EMEET M0 Plus mic gain: numid=6, range 0-4 (-6dB to +6dB), 3 = +3dB
+    kiosk_mic_gain: 3
+
+  tasks:
+    # Build locally first
+    - name: Build display app locally
+      delegate_to: localhost
+      ansible.builtin.command:
+        cmd: npm run build
+        chdir: "{{ kiosk_src_dir }}/display"
+      register: build_result
+      changed_when: true
+
+    # Create deployment directory (no sudo needed for home dir)
+    - name: Create deployment directory
+      ansible.builtin.raw: mkdir -p ~/voice-display/sounds
+      changed_when: true
+
+    # Sync files using synchronize (runs locally, doesn't need remote Python)
+    - name: Sync display app
+      ansible.posix.synchronize:
+        src: "{{ kiosk_src_dir }}/display/"
+        dest: "~/voice-display/display/"
+        delete: true
+        rsync_opts:
+          - "--exclude=node_modules"
+
+    - name: Sync voice pipeline
+      ansible.posix.synchronize:
+        src: "{{ kiosk_src_dir }}/voice/"
+        dest: "~/voice-display/voice/"
+        delete: true
+        rsync_opts:
+          - "--exclude=venv"
+          - "--exclude=__pycache__"
+          - "--exclude=*.pyc"
+
+    - name: Sync sounds
+      ansible.posix.synchronize:
+        src: "{{ kiosk_src_dir }}/sounds/"
+        dest: "~/voice-display/sounds/"
+        delete: true
+
+    - name: Sync systemd services
+      ansible.posix.synchronize:
+        src: "{{ kiosk_src_dir }}/systemd/"
+        dest: "~/voice-display/systemd/"
+        delete: true
+
+    # No Node.js dependencies needed - we serve static files with Python
+
+    - name: Set up Python venv and install dependencies
+      ansible.builtin.raw: |
+        cd ~/voice-display/voice
+        if [ ! -d "venv" ]; then
+          python3 -m venv venv
+        fi
+        source venv/bin/activate
+        pip install -r requirements.txt
+      changed_when: true
+
+    # Create environment file
+    - name: Create display environment file
+      ansible.builtin.raw: |
+        echo "VITE_API_URL={{ kiosk_api_url }}" > ~/voice-display/display/.env
+      changed_when: true
+
+    # Set microphone gain
+    - name: Set microphone gain (EMEET M0 Plus)
+      ansible.builtin.raw: |
+        amixer -c 2 cset numid=6 {{ kiosk_mic_gain }}
+      changed_when: true
+      failed_when: false
+
+    - name: Display deployment status
+      ansible.builtin.debug:
+        msg: |
+          Our Kiosk files deployed to ~/voice-display/
+
+          To start manually:
+            cd ~/voice-display/display/dist
+            python3 -m http.server {{ kiosk_port }} --bind 0.0.0.0
+
+          Display URL: http://{{ ansible_host }}:{{ kiosk_port }}
+
+          For systemd services, run with -K flag and use the setup-systemd tag:
+            ansible-playbook playbooks/our-kiosk-deploy.yml -K --tags setup-systemd
+
+# Optional: Set up systemd services (requires sudo password with -K)
+- name: Setup systemd services
+  hosts: "{{ kiosk_target | default('trv-jetson-nano') }}"
+  gather_facts: false
+  become: true
+  tags:
+    - setup-systemd
+    - never
+
+  vars:
+    kiosk_deploy_dir: "/home/{{ ansible_user }}/voice-display"
+    kiosk_port: 5174
+    kiosk_api_url: "http://<dashboard-tailscale-ip>:3001"
+
+  tasks:
+    - name: Copy systemd service files
+      ansible.builtin.raw: |
+        cp {{ kiosk_deploy_dir }}/systemd/*.service /etc/systemd/system/
+      changed_when: true
+
+    - name: Reload systemd and enable services
+      ansible.builtin.raw: |
+        systemctl daemon-reload
+        systemctl enable voice-display-ui voice-display-voice
+        systemctl restart voice-display-ui
+      changed_when: true
+
+    - name: Enable kiosk-display service (Minisforum only)
+      ansible.builtin.raw: |
+        if [ -f /etc/systemd/system/kiosk-display.service ]; then
+          systemctl enable kiosk-display
+          systemctl restart kiosk-display
+        fi
+      changed_when: true
+
+    - name: Check service status
+      ansible.builtin.raw: |
+        echo "voice-display-ui: $(systemctl is-active voice-display-ui)"
+        echo "voice-display-voice: $(systemctl is-active voice-display-voice)"
+        echo "kiosk-display: $(systemctl is-active kiosk-display 2>/dev/null || echo 'not installed')"
+      register: svc_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display systemd status
+      ansible.builtin.debug:
+        msg: |
+          Systemd services configured!
+          {{ svc_status.stdout | default('unknown') | trim }}
+
+          Commands:
+            sudo systemctl status kiosk-display voice-display-ui voice-display-voice
+            journalctl -u voice-display-voice -f

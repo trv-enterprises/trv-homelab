@@ -1,0 +1,51 @@
+# Development EdgeLake Operator
+# Minimal configuration for testing and development
+
+metadata:
+  namespace: default
+  app_name: operator-dev
+  service_type: NodePort
+
+image:
+  repository: anylogco/edgelake-network
+  tag: "1.3.2500"
+  pull_policy: IfNotPresent
+
+# Disable persistence for ephemeral development
+persistence:
+  enabled: false
+
+resources:
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+
+node_configs:
+  general:
+    NODE_NAME: "operator-dev"
+    COMPANY_NAME: "Dev Company"
+
+  networking:
+    ANYLOG_SERVER_PORT: 32148
+    ANYLOG_REST_PORT: 32149
+
+  database:
+    DB_TYPE: sqlite
+    SYSTEM_QUERY: true
+    MEMORY: true
+
+  blockchain:
+    LEDGER_CONN: "127.0.0.1:32048"
+    BLOCKCHAIN_SOURCE: master
+
+  operator:
+    CLUSTER_NAME: dev-cluster
+    DEFAULT_DBMS: dev_data
+    ENABLE_PARTITIONS: false
+
+  advanced:
+    DEBUG_MODE: true
+    QUERY_POOL: 3

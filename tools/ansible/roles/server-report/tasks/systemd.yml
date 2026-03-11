@@ -1,0 +1,82 @@
+---
+# Detect systemd services (both system and user level)
+
+# System-level services
+- name: Get running system services
+  ansible.builtin.shell: |
+    systemctl list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | awk '{print $1}' | sed 's/.service$//'
+  register: system_services_raw
+  changed_when: false
+  ignore_errors: true
+
+- name: Store system services
+  ansible.builtin.set_fact:
+    system_services: "{{ system_services_raw.stdout_lines | default([]) }}"
+
+# User-level services (run as the ansible_user)
+- name: Get running user services
+  ansible.builtin.shell: |
+    systemctl --user list-units --type=service --state=running --no-pager --no-legend 2>/dev/null | awk '{print $1}' | sed 's/.service$//'
+  register: user_services_raw
+  changed_when: false
+  ignore_errors: true
+  become: false
+
+- name: Store user services
+  ansible.builtin.set_fact:
+    user_services: "{{ user_services_raw.stdout_lines | default([]) }}"
+
+# Get Docker container port mappings (for resolving docker-proxy to container names)
+- name: Get Docker container port mappings
+  ansible.builtin.shell: |
+    docker ps --format '{{ '{{' }}.Names{{ '}}' }}|{{ '{{' }}.Ports{{ '}}' }}' 2>/dev/null | while read line; do
+      name=$(echo "$line" | cut -d'|' -f1)
+      ports=$(echo "$line" | cut -d'|' -f2)
+      # Extract published ports (0.0.0.0:PORT->)
+      echo "$ports" | grep -oE '0\.0\.0\.0:[0-9]+' | cut -d: -f2 | while read port; do
+        echo "$port|$name"
+      done
+    done
+  register: docker_port_map_raw
+  changed_when: false
+  ignore_errors: true
+  when: docker_available | default(false)
+
+- name: Build Docker port to container map
+  ansible.builtin.set_fact:
+    docker_port_map: "{{ docker_port_map | default({}) | combine({item.split('|')[0]: item.split('|')[1]}) }}"
+  loop: "{{ docker_port_map_raw.stdout_lines | default([]) }}"
+  when: docker_port_map_raw.stdout_lines is defined and item | length > 0
+
+- name: Initialize empty Docker port map if not available
+  ansible.builtin.set_fact:
+    docker_port_map: {}
+  when: docker_port_map is not defined
+
+# Get listening ports with process info (needs root for process names)
+- name: Get listening TCP ports
+  ansible.builtin.shell: |
+    ss -tlnp 2>/dev/null | awk '/LISTEN/ {
+      split($4, addr, ":");
+      port = addr[length(addr)];
+      proc = $6;
+      gsub(/.*users:\(\("/, "", proc);
+      gsub(/".*/, "", proc);
+      print port "|" proc;
+    }' | sort -t"|" -k1 -n | uniq | head -50
+  register: listening_ports_raw
+  changed_when: false
+  ignore_errors: true
+  become: true
+
+- name: Parse listening ports
+  ansible.builtin.set_fact:
+    listening_ports: >-
+      {{ listening_ports | default([]) + [{
+        'port': item.split('|')[0],
+        'process': (docker_port_map[item.split('|')[0]] | default(item.split('|')[1] | default('')))
+          if item.split('|')[1] | default('') == 'docker-proxy'
+          else (item.split('|')[1] | default(''))
+      }] }}
+  loop: "{{ listening_ports_raw.stdout_lines | default([]) }}"
+  when: item | length > 0 and item.split('|')[0] | length > 0

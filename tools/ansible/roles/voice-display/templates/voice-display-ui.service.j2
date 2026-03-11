@@ -1,0 +1,16 @@
+[Unit]
+Description=Voice Display UI (React App)
+After=network.target
+
+[Service]
+Type=simple
+User={{ voice_display_user }}
+WorkingDirectory={{ voice_display_deploy_dir }}/display
+ExecStart=/usr/bin/npx vite preview --host 0.0.0.0 --port {{ voice_display_port }}
+Restart=always
+RestartSec=5
+
+Environment=VITE_API_URL={{ voice_display_api_url }}
+
+[Install]
+WantedBy=multi-user.target

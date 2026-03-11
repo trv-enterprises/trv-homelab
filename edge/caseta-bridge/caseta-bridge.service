@@ -1,0 +1,16 @@
+[Unit]
+Description=Caseta MQTT Bridge
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/caseta-bridge/venv/bin/python3 /opt/caseta-bridge/bridge.py /etc/caseta-bridge/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

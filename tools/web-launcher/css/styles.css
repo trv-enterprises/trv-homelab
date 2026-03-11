@@ -1,0 +1,140 @@
+body {
+  font-family: 'Open Sans', "Segoe UI", Frutiger, "Frutiger Linotype", "Dejavu Sans", "Helvetica Neue", Arial, sans-serif;
+  background-color: #1a1a2e;
+  margin-bottom: 60px;
+  color: #eee;
+}
+
+h1 {
+  color: #00d4ff;
+  margin-left: 20px;
+  margin-top: 20px;
+}
+
+h3 {
+  color: #ccc;
+  margin-left: 10px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.category {
+  margin: 15px 10px;
+}
+
+.demo:hover {
+  background: #4a4a6a;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.demo {
+  font-family: 'Avenir Next', 'Open Sans', sans-serif;
+  font-size: 14px;
+  display: inline-block;
+  padding: 12px 15px;
+  margin: 3px;
+  height: 46px;
+  width: 200px;
+  text-align: left;
+  white-space: nowrap;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.col1 {
+  display: inline-block;
+  width: 15%;
+}
+
+.col2 {
+  display: inline-block;
+  width: 82%;
+}
+
+/* Servers - Blue */
+.demo-server,
+.demo-server a {
+  background: #0077b6;
+  color: #FFF;
+}
+
+/* Apps - Green */
+.demo-app,
+.demo-app a {
+  background: #2d6a4f;
+  color: #FFF;
+}
+
+/* Infrastructure - Purple */
+.demo-infra,
+.demo-infra a {
+  background: #7b2cbf;
+  color: #FFF;
+}
+
+/* Reports - Orange */
+.demo-report,
+.demo-report a {
+  background: #e85d04;
+  color: #FFF;
+}
+
+/* Docs - Teal */
+.demo-docs,
+.demo-docs a {
+  background: #087f8c;
+  color: #FFF;
+}
+
+/* Actions - Red */
+.demo-action,
+.demo-action a {
+  background: #c1121f;
+  color: #FFF;
+}
+
+/* EdgeLake - Cyan */
+.demo-edgelake,
+.demo-edgelake a {
+  background: #00b4d8;
+  color: #FFF;
+}
+
+a {
+  text-decoration: none;
+}
+
+footer {
+  display: inline-block;
+  position: fixed;
+  left: 0px;
+  bottom: 0px;
+  right: 0px;
+  background-color: #16213e;
+  height: 40px;
+  line-height: 40px;
+  width: 100%;
+  padding-left: 20px;
+  padding-right: 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  color: #888;
+  font-size: 12px;
+}
+
+.container-fluid {
+  padding: 0 20px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.section {
+  flex: 1;
+  min-width: 220px;
+  margin: 10px;
+}

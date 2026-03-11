@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Viewer</title>
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background-color: #1a1a2e;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 20px 40px;
+      line-height: 1.6;
+    }
+    #content {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #16213e;
+      padding: 30px 40px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    h1, h2, h3, h4 {
+      color: #00d4ff;
+      border-bottom: 1px solid #333;
+      padding-bottom: 8px;
+    }
+    h1 { font-size: 2em; }
+    h2 { font-size: 1.5em; }
+    h3 { font-size: 1.2em; }
+    a {
+      color: #00d4ff;
+    }
+    code {
+      background: #0d1b2a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #0d1b2a;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      border-left: 3px solid #00d4ff;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 15px 0;
+    }
+    th, td {
+      border: 1px solid #333;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background: #0d1b2a;
+      color: #00d4ff;
+    }
+    tr:nth-child(even) {
+      background: #1f2b47;
+    }
+    blockquote {
+      border-left: 4px solid #00d4ff;
+      margin: 15px 0;
+      padding-left: 20px;
+      color: #aaa;
+    }
+    ul, ol {
+      padding-left: 25px;
+    }
+    li {
+      margin: 5px 0;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 20px;
+      color: #00d4ff;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    .file-path {
+      color: #666;
+      font-size: 12px;
+      margin-bottom: 20px;
+    }
+    .error {
+      color: #ff6b6b;
+      padding: 20px;
+      background: #2d1f1f;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="content">
+  <a href="index.html" class="back-link"><i class="fas fa-arrow-left"></i> Back to Launcher</a>
+  <div class="file-path" id="filepath"></div>
+  <div id="markdown"></div>
+</div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const filePath = params.get('file');
+
+  document.getElementById('filepath').textContent = filePath || '';
+
+  if (filePath) {
+    fetch('file://' + filePath)
+      .then(response => {
+        if (!response.ok) throw new Error('File not found');
+        return response.text();
+      })
+      .then(text => {
+        document.getElementById('markdown').innerHTML = marked.parse(text);
+        // Update title from first h1
+        const h1 = document.querySelector('#markdown h1');
+        if (h1) document.title = h1.textContent + ' - Viewer';
+      })
+      .catch(err => {
+        document.getElementById('markdown').innerHTML = `
+          <div class="error">
+            <h3>Cannot load file directly</h3>
+            <p>Browsers block local file access for security. Options:</p>
+            <ul>
+              <li><strong>Option 1:</strong> Run a local server:<br>
+                <code>cd /path/to/trv-homelab/tools/web-launcher && python3 -m http.server 8080</code><br>
+                Then visit <a href="http://localhost:8080">http://localhost:8080</a>
+              </li>
+              <li><strong>Option 2:</strong> Install a markdown browser extension</li>
+              <li><strong>Option 3:</strong> Open directly in VS Code or another editor</li>
+            </ul>
+            <p>File: <code>${filePath}</code></p>
+          </div>
+        `;
+      });
+  } else {
+    document.getElementById('markdown').innerHTML = '<div class="error">No file specified</div>';
+  }
+</script>
+
+</body>
+</html>

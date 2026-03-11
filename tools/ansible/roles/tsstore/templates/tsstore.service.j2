@@ -1,0 +1,24 @@
+[Unit]
+Description=tsstore time-series database
+After=network.target
+
+[Service]
+Type=simple
+User={{ tsstore_user }}
+Group={{ tsstore_group }}
+EnvironmentFile={{ tsstore_config_dir }}/tsstore.env
+ExecStart={{ tsstore_bin_dir }}/tsstore serve --socket {{ tsstore_socket }}
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{ tsstore_data_dir }} {{ tsstore_run_dir }}
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

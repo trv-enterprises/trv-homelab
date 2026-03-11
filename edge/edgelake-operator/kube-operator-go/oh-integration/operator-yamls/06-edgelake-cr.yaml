@@ -1,0 +1,75 @@
+# EdgeLakeOperator Custom Resource
+# Values will be substituted from Open Horizon userInput
+apiVersion: edgelake.trv.io/v1alpha1
+kind: EdgeLakeOperator
+metadata:
+  name: ${EDGELAKE_NODE_NAME}
+  namespace: default
+spec:
+  metadata:
+    hostname: ${EDGELAKE_NODE_NAME}
+    appName: ${EDGELAKE_NODE_NAME}
+    serviceName: ${EDGELAKE_NODE_NAME}-service
+    configMapName: ${EDGELAKE_NODE_NAME}-configmap
+    serviceType: ${EDGELAKE_SERVICE_TYPE}
+
+  image:
+    repository: anylogco/edgelake-network
+    tag: "${EDGELAKE_IMAGE_TAG}"
+    pullPolicy: IfNotPresent
+
+  persistence:
+    enabled: true
+    storageClassName: "${EDGELAKE_STORAGE_CLASS}"
+    anylog:
+      size: 5Gi
+    blockchain:
+      size: 1Gi
+    data:
+      size: 10Gi
+    scripts:
+      size: 1Gi
+
+  resources:
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+
+  nodeConfigs:
+    general:
+      nodeType: operator
+      nodeName: ${EDGELAKE_NODE_NAME}
+      companyName: "${EDGELAKE_COMPANY_NAME}"
+      disableCLI: false
+      remoteCLI: true
+
+    networking:
+      overlayIP: "${EDGELAKE_OVERLAY_IP}"
+      anylogServerPort: ${EDGELAKE_SERVER_PORT}
+      anylogRESTPort: ${EDGELAKE_REST_PORT}
+      anylogBrokerPort: ${EDGELAKE_BROKER_PORT}
+
+    database:
+      dbType: ${EDGELAKE_DB_TYPE}
+
+    blockchain:
+      ledgerConn: "${EDGELAKE_LEDGER_CONN}"
+      blockchainSource: master
+      syncTime: "30 second"
+
+    operator:
+      clusterName: "${EDGELAKE_CLUSTER_NAME}"
+      defaultDBMS: "${EDGELAKE_DEFAULT_DBMS}"
+      enablePartitions: true
+      partitionInterval: "14 days"
+      partitionKeep: 3
+
+    mqtt:
+      enableMQTT: ${EDGELAKE_ENABLE_MQTT}
+      mqttBroker: "${EDGELAKE_MQTT_BROKER}"
+
+    monitoring:
+      monitorNodes: true

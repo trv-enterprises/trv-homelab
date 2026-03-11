@@ -1,0 +1,16 @@
+{
+  "properties": [
+    {
+      "name": "service_type",
+      "value": "edgelake-kube-operator"
+    },
+    {
+      "name": "deployment_target",
+      "value": "kubernetes"
+    }
+  ],
+  "constraints": [
+    "purpose == edgelake-kubernetes",
+    "openhorizon.kubernetesEnabled == true"
+  ]
+}

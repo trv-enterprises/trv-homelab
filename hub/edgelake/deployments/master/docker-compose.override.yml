@@ -1,0 +1,9 @@
+# Master node deployment override
+# This file contains deployment-specific overrides for the master node
+# Base configuration is inherited from ../../docker-compose.base.yml
+
+services:
+  edgelake-master:
+    # Add any master-specific service overrides here
+    # Most configuration is handled via env files in ./configs/
+    ports: []  # Master typically doesn't expose additional ports beyond network_mode: host

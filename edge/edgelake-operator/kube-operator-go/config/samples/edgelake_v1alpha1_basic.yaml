@@ -1,0 +1,56 @@
+# Basic EdgeLake Operator deployment
+# Minimal configuration for development/testing
+apiVersion: edgelake.trv.io/v1alpha1
+kind: EdgeLakeOperator
+metadata:
+  name: edgelake-operator-basic
+  namespace: default
+spec:
+  metadata:
+    hostname: edgelake-operator
+    appName: edgelake-operator
+    serviceType: NodePort
+
+  image:
+    repository: anylogco/edgelake-network
+    tag: "1.3.2500"
+    pullPolicy: IfNotPresent
+
+  persistence:
+    enabled: true
+    anylog:
+      size: 5Gi
+    blockchain:
+      size: 1Gi
+    data:
+      size: 10Gi
+    scripts:
+      size: 1Gi
+
+  resources:
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+
+  nodeConfigs:
+    general:
+      nodeType: operator
+      companyName: "My Company"
+
+    networking:
+      anylogServerPort: 32148
+      anylogRESTPort: 32149
+
+    database:
+      dbType: sqlite
+
+    blockchain:
+      ledgerConn: "127.0.0.1:32048"
+      blockchainSource: master
+
+    operator:
+      clusterName: my-cluster
+      defaultDBMS: my_company

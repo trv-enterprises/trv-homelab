@@ -1,0 +1,9 @@
+# Operator2 node deployment override
+# This file contains deployment-specific overrides for the second operator node
+# Base configuration is inherited from ../../docker-compose.base.yml
+
+services:
+  edgelake-operator2:
+    # Add any operator2-specific service overrides here
+    # Most configuration is handled via env files in ./configs/
+    ports: []  # Using network_mode: host, but can add explicit port mappings if needed

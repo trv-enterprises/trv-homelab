@@ -1,0 +1,84 @@
+# EdgeLake Operator with OPC-UA PLC Integration
+# Configured to collect data from industrial PLCs via OPC-UA
+
+metadata:
+  namespace: edgelake-factory
+  app_name: operator-plc
+  service_type: NodePort
+
+image:
+  repository: anylogco/edgelake-network
+  tag: "1.3.2500"
+  pull_policy: IfNotPresent
+
+persistence:
+  enabled: true
+  storageClassName: "standard"
+  anylog:
+    size: 5Gi
+  blockchain:
+    size: 1Gi
+  data:
+    size: 100Gi
+  scripts:
+    size: 1Gi
+
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+node_configs:
+  general:
+    NODE_NAME: "operator-plc-1"
+    COMPANY_NAME: "Manufacturing Co"
+
+  geolocation:
+    LOCATION: "42.3601,-71.0589"
+    COUNTRY: "USA"
+    STATE: "Massachusetts"
+    CITY: "Boston"
+
+  networking:
+    ANYLOG_SERVER_PORT: 32148
+    ANYLOG_REST_PORT: 32149
+
+  database:
+    DB_TYPE: psql
+    DB_USER: edgelake
+    DB_PASSWD: "secure-password"
+    DB_IP: postgres-service.factory.svc.cluster.local
+    DB_PORT: 5432
+
+  blockchain:
+    LEDGER_CONN: "master-node.factory.svc.cluster.local:32048"
+    BLOCKCHAIN_SOURCE: master
+
+  operator:
+    CLUSTER_NAME: factory-cluster
+    DEFAULT_DBMS: factory_data
+    ENABLE_PARTITIONS: true
+    PARTITION_INTERVAL: "7 days"
+    PARTITION_KEEP: 4
+
+  # OPC-UA Configuration
+  opcua:
+    ENABLE_OPCUA: true
+    # OPC-UA server URL for PLC
+    OPCUA_URL: "opc.tcp://plc-1.factory.local:4840"
+    # Root node containing data
+    OPCUA_NODE: "ns=2;s=DataSet"
+    # Poll data every 5 seconds
+    OPCUA_FREQUENCY: "5 seconds"
+
+  monitoring:
+    MONITOR_NODES: true
+
+  advanced:
+    QUERY_POOL: 6
+    WRITE_IMMEDIATE: false
+    THRESHOLD_TIME: "10 seconds"
+    THRESHOLD_VOLUME: "100KB"

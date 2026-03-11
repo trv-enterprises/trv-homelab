@@ -1,0 +1,20 @@
+[Unit]
+Description=MQTT Sink for system-stats
+After=network.target tsstore.service
+Wants=tsstore.service
+
+[Service]
+Type=simple
+User=<user>
+ExecStart=/home/<user>/bin/mqtt-sink \
+    -http http://localhost:21080 \
+    -store system-stats \
+    -broker tcp://<pi-002-tailscale-ip>:1883 \
+    -topic trv-srv-001/system-stats \
+    -cursor-file /var/lib/mqtt-sink/system-stats.cursor
+Restart=always
+RestartSec=10
+Environment=TSSTORE_API_KEY=CHANGEME
+
+[Install]
+WantedBy=multi-user.target

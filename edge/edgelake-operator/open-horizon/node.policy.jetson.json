@@ -1,0 +1,9 @@
+{
+  "properties": [
+    {"name": "purpose", "value": "edgelake"},
+    {"name": "openhorizon.allowPrivileged", "value": true},
+    {"name": "device.type", "value": "jetson-nano"},
+    {"name": "device.arch", "value": "arm64"}
+  ],
+  "constraints": []
+}

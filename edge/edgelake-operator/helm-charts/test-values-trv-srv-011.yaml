@@ -1,0 +1,166 @@
+# Test values for deploying EdgeLake operator on trv-srv-011 (k3s cluster)
+# Target: 100.74.102.38 (Tailscale overlay network)
+
+metadata:
+  namespace: default
+  hostname: edgelake-operator-k8s
+  app_name: edgelake-operator-k8s
+  service_name: edgelake-operator-k8s-service
+  configmap_name: edgelake-operator-k8s-configmap
+  service_type: NodePort  # Use NodePort for direct access via Tailscale
+
+image:
+  repository: <hub-tailscale-ip>:5000/edgelake-mcp
+  tag: "amd64-latest"
+  pull_policy: IfNotPresent
+
+persistence:
+  enabled: true
+  storageClassName: ""  # Use k3s default (local-path)
+  accessMode: ReadWriteOnce
+  anylog:
+    size: 5Gi
+  blockchain:
+    size: 1Gi
+  data:
+    size: 10Gi
+  scripts:
+    size: 1Gi
+
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+
+node_configs:
+  directories:
+    ANYLOG_PATH: /app
+    LOCAL_SCRIPTS: /app/deployment-scripts/node-deployment
+    TEST_DIR: /app/deployment-scripts/tests
+
+  general:
+    LICENSE_KEY: ""
+    NODE_TYPE: operator
+    NODE_NAME: ""  # Will default to app_name
+    COMPANY_NAME: "TRV Test"
+    DISABLE_CLI: false
+    REMOTE_CLI: true  # Enable remote CLI for testing
+
+  geolocation:
+    LOCATION: ""
+    COUNTRY: "US"
+    STATE: "MA"
+    CITY: "Boston"
+
+  networking:
+    OVERLAY_IP: "100.74.102.38"  # Tailscale IP of trv-srv-011
+    ANYLOG_SERVER_PORT: 32448    # Unique ports for this deployment
+    ANYLOG_REST_PORT: 32449
+    ANYLOG_BROKER_PORT: 32450
+    TCP_BIND: false
+    REST_BIND: false
+    BROKER_BIND: false
+    CONFIG_NAME: ""
+    NIC_TYPE: ""
+    TCP_THREADS: 6
+    REST_TIMEOUT: 30
+    REST_THREADS: 6
+    BROKER_THREADS: 6
+
+  database:
+    DB_TYPE: sqlite
+    DB_USER: ""
+    DB_PASSWD: ""
+    DB_IP: 127.0.0.1
+    DB_PORT: 5432
+    AUTOCOMMIT: false
+    ENABLE_NOSQL: false
+    SYSTEM_QUERY: false
+    MEMORY: false
+    NOSQL_TYPE: mongo
+    NOSQL_USER: ""
+    NOSQL_PASSWD: ""
+    NOSQL_IP: 127.0.0.1
+    NOSQL_PORT: 27017
+    BLOBS_DBMS: false
+    BLOBS_REUSE: true
+
+  blockchain:
+    LEDGER_CONN: "<hub-tailscale-ip>:32048"  # Connect to master on trv-srv-001
+    SYNC_TIME: "30 second"
+    BLOCKCHAIN_SYNC: "30 second"
+    BLOCKCHAIN_SOURCE: master
+    BLOCKCHAIN_DESTINATION: file
+
+  operator:
+    CLUSTER_NAME: trv-k8s-cluster
+    DEFAULT_DBMS: trv_test
+    MEMBER: ""
+    ENABLE_HA: false
+    START_DATE: 30
+    OPERATOR_THREADS: 3
+    ENABLE_PARTITIONS: true
+    TABLE_NAME: "*"
+    PARTITION_COLUMN: insert_timestamp
+    PARTITION_INTERVAL: "14 days"
+    PARTITION_KEEP: 3
+    PARTITION_SYNC: "1 day"
+
+  mqtt:
+    ENABLE_MQTT: false
+    MQTT_BROKER: ""
+    MQTT_PORT: 1883
+    MQTT_USER: ""
+    MQTT_PASSWD: ""
+    MQTT_LOG: false
+    MSG_TOPIC: ""
+    MSG_DBMS: trv_test
+    MSG_TABLE: "bring [table]"
+    MSG_TIMESTAMP_COLUMN: "bring [timestamp]"
+    MSG_VALUE_COLUMN: "bring [value]"
+    MSG_VALUE_COLUMN_TYPE: float
+
+  opcua:
+    ENABLE_OPCUA: false
+    OPCUA_URL: ""
+    OPCUA_NODE: ""
+    OPCUA_FREQUENCY: ""
+
+  etherip:
+    ENABLE_ETHERIP: false
+    SIMULATOR_MODE: false
+    ETHERIP_URL: ""
+    ETHERIP_FREQUENCY: ""
+
+  aggregations:
+    ENABLE_AGGREGATIONS: false
+    AGGREGATION_TIME_COLUMN: insert_timestamp
+    AGGREGATION_VALUE_COLUMN: value
+
+  monitoring:
+    MONITOR_NODES: false
+    STORE_MONITORING: false
+    SYSLOG_MONITORING: false
+
+  mcp:
+    MCP_AUTOSTART: false
+
+  advanced:
+    DEPLOY_LOCAL_SCRIPT: false
+    DEBUG_MODE: false
+    COMPRESS_FILE: true
+    QUERY_POOL: 6
+    WRITE_IMMEDIATE: false
+    THRESHOLD_TIME: "60 seconds"
+    THRESHOLD_VOLUME: "100KB"
+
+  nebula:
+    ENABLE_NEBULA: false
+    NEBULA_NEW_KEYS: false
+    IS_LIGHTHOUSE: false
+    CIDR_OVERLAY_ADDRESS: ""
+    LIGHTHOUSE_IP: ""
+    LIGHTHOUSE_NODE_IP: ""

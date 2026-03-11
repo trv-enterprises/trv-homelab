@@ -1,0 +1,197 @@
+# Server Report: {{ inventory_hostname }}
+
+**Tailscale IP:** {{ ansible_host }}
+{% if lan_ip is defined and lan_ip %}
+**LAN IP:** {{ lan_ip }}
+{% endif %}
+**Role:** {{ role | default('N/A') }}
+**Scanned:** {{ ansible_date_time.iso8601 }}
+
+---
+
+## System Information
+
+| Property | Value |
+|----------|-------|
+| Hostname | {{ ansible_hostname }} |
+| OS | {{ os_pretty_name | default(ansible_distribution ~ ' ' ~ ansible_distribution_version) }} |
+| Kernel | {{ ansible_kernel }} |
+| Architecture | {{ ansible_architecture }} |
+| Uptime | {{ ansible_uptime_seconds | int // 86400 }} days, {{ (ansible_uptime_seconds | int % 86400) // 3600 }} hours |
+
+---
+
+## Resource Usage
+
+### CPU
+
+| Property | Value |
+|----------|-------|
+| Model | {{ ansible_processor[2] | default('N/A') }} |
+| Cores | {{ ansible_processor_vcpus }} |
+| Load (1/5/15 min) | {{ load_avg }} |
+
+### Memory
+
+| Property | Value |
+|----------|-------|
+| Total | {{ ansible_memtotal_mb }} MB |
+| Used | {{ mem_used_mb }} MB ({{ mem_pct }}%) |
+| Available | {{ ansible_memfree_mb }} MB |
+
+### Disk Usage
+
+| Filesystem | Size | Used | Avail | Use% | Mount |
+|------------|------|------|-------|------|-------|
+{% for disk in disk_mounts | default([]) %}
+| {{ disk.filesystem }} | {{ disk.size }} | {{ disk.used }} | {{ disk.avail }} | {{ disk.pct }} | {{ disk.mount }} |
+{% endfor %}
+
+---
+
+## Application Inventory
+
+{% if app_inventory.dashboard | length > 0 %}
+### Dashboard
+
+| Component | Image | Status | Health |
+|-----------|-------|--------|--------|
+{% for app in app_inventory.dashboard %}
+| {{ app.name }} | {{ app.image | default('N/A') }} | {{ app.status }} | {{ health_results.dashboard | default('N/A') if 'server' in app.name else 'N/A' }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.edgelake | length > 0 %}
+### EdgeLake
+
+| Component | Type | Status | Health |
+|-----------|------|--------|--------|
+{% for app in app_inventory.edgelake %}
+| {{ app.name }} | {{ app.type }} | {{ app.status }} | {{ health_results['edgelake_' ~ app.name.split('-')[1]] | default('N/A') }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.open_horizon | length > 0 %}
+### Open Horizon
+
+| Component | Type | Status | Health |
+|-----------|------|--------|--------|
+{% for app in app_inventory.open_horizon %}
+| {{ app.name }} | {{ app.type }} | {{ app.status }} | {{ health_results.oh_exchange | default('N/A') if app.name == 'exchange-api' else 'N/A' }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.tsstore | length > 0 %}
+### ts-store
+
+| Instance | Deployment | Status | Health |
+|----------|------------|--------|--------|
+{% for app in app_inventory.tsstore %}
+| {{ app.name }} | {{ app.type }} | {{ app.status }} | {{ health_results.tsstore | default('N/A') }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.collectors | length > 0 %}
+### Data Collectors
+
+| Collector | Deployment | Status |
+|-----------|------------|--------|
+{% for app in app_inventory.collectors %}
+| {{ app.name }} | {{ app.type }} | {{ app.status }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.mosquitto | length > 0 %}
+### Mosquitto MQTT
+
+| Instance | Type | Port | Status |
+|----------|------|------|--------|
+{% for app in app_inventory.mosquitto %}
+| {{ app.name }} | {{ app.type }} | {{ app.ports | default(app.port | default('1883')) }} | {{ app.status }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.k3s | length > 0 %}
+### Kubernetes (k3s)
+
+| Instance | Port | Status |
+|----------|------|--------|
+{% for app in app_inventory.k3s %}
+| {{ app.name }} | {{ app.port }} | {{ app.status }} |
+{% endfor %}
+{% endif %}
+
+{% if app_inventory.docker_registry | length > 0 %}
+### Docker Registry
+
+| Instance | Status | Health |
+|----------|--------|--------|
+{% for app in app_inventory.docker_registry %}
+| {{ app.name }} | {{ app.status }} | {{ health_results.docker_registry | default('N/A') }} |
+{% endfor %}
+{% endif %}
+
+---
+
+## Docker
+{% set categorized_containers = app_inventory.dashboard + app_inventory.edgelake + app_inventory.open_horizon + app_inventory.docker_registry %}
+{% set categorized_names = categorized_containers | map(attribute='name') | list %}
+{% set uncategorized = docker_containers | rejectattr('name', 'in', categorized_names) | list %}
+
+{% if docker_available and uncategorized | length > 0 %}
+### Other Containers
+
+| Name | Image | Status |
+|------|-------|--------|
+{% for c in uncategorized %}
+| {{ c.name }} | {{ c.image }} | {{ c.status }} |
+{% endfor %}
+
+{% endif %}
+{% if docker_available and docker_volumes | length > 0 %}
+### Volumes
+
+{% for v in docker_volumes[:20] %}
+- {{ v }}
+{% endfor %}
+{% if docker_volumes | length > 20 %}
+- ... and {{ docker_volumes | length - 20 }} more
+{% endif %}
+{% endif %}
+{% if not docker_available %}
+_Docker not available_
+{% endif %}
+
+---
+
+## Services
+
+### System Services (application-related)
+
+| Service | Status |
+|---------|--------|
+{% for svc in system_services %}
+{% if svc in ['horizon', 'k3s', 'tsstore', 'system-stats', 'journal-logs', 'mosquitto', 'roonserver', 'libvirtd', 'vsftpd'] %}
+| {{ svc }} | running |
+{% endif %}
+{% endfor %}
+
+### User Services
+
+| Service | Status |
+|---------|--------|
+{% for svc in user_services %}
+| {{ svc }} | running |
+{% endfor %}
+
+---
+
+## Listening Ports
+
+| Port | Process |
+|------|---------|
+{% for p in listening_ports | default([]) | sort(attribute='port') %}
+{% if p.port | int > 0 %}
+| {{ p.port }} | {{ p.process | truncate(50) }} |
+{% endif %}
+{% endfor %}

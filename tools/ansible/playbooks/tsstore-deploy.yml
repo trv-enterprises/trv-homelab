@@ -1,0 +1,51 @@
+---
+# tsstore Deployment Playbook
+#
+# Deploy tsstore and collectors to target hosts
+#
+# Usage:
+#   ansible-playbook playbooks/tsstore-deploy.yml --limit trv-srv-001 -K
+#   ansible-playbook playbooks/tsstore-deploy.yml --limit pis -K
+#
+# Prerequisites:
+#   Build binaries first: cd ../../../ts-store && make build
+#
+# Note: -K (--ask-become-pass) prompts for sudo password
+
+- name: Deploy tsstore
+  hosts: all
+  become: false
+
+  vars:
+    # ts-store repo is a sibling to trv-homelab
+    tsstore_local_bin_path: /path/to/ts-store/bin
+
+  pre_tasks:
+    - name: Check that tsstore binary exists locally
+      ansible.builtin.stat:
+        path: /path/to/ts-store/bin/tsstore-linux-amd64
+      delegate_to: localhost
+      register: tsstore_binary
+      run_once: true
+
+    - name: Fail if binary not built
+      ansible.builtin.fail:
+        msg: "tsstore binary not found. Run 'make build' in ts-store directory first."
+      when: not tsstore_binary.stat.exists
+      run_once: true
+
+    - name: Stop existing tsstore service if running
+      ansible.builtin.systemd:
+        name: tsstore
+        state: stopped
+      become: true
+      failed_when: false
+
+    - name: Kill any orphan tsstore processes
+      ansible.builtin.shell: pgrep -f '/usr/local/bin/tsstore serve' | xargs -r kill || true
+      become: true
+      changed_when: false
+      failed_when: false
+
+  roles:
+    - tsstore

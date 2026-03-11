@@ -1,0 +1,64 @@
+# Environment files with secrets
+.env.local
+.env.root
+!**/.env.example
+!**/.env.root.template
+
+# Specific .env files that contain secrets (not deployment configs)
+edge/tsstore/.env
+edge/weather-poller/.env
+devices/trv-srv-001/stats-tsstore/.env
+simulators/env/production.env
+
+# Docker Compose local overrides
+**/docker-compose.local.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/
+
+# Node.js
+node_modules/
+dist/
+.cache/
+
+# Go
+/bin/
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+**/*.bak
+**/*~
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/daylogs/
+
+# Drawio backup files
+docs/.$*.bkp
+
+# Server reports (generated artifacts)
+svr-rpts/2026-*/
+svr-rpts/latest
+
+# Ansible
+tools/ansible/reports/
+tools/ansible/.ansible_cache/
+tools/ansible/inventory/hosts.yml
+tools/ansible/inventory/group_vars/all/vault.yml
+tools/ansible/inventory/host_vars/

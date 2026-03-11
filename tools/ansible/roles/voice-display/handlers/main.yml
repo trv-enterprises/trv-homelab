@@ -1,0 +1,19 @@
+---
+# Voice Display handlers
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart voice-display-ui
+  ansible.builtin.systemd:
+    name: voice-display-ui
+    state: restarted
+  become: true
+
+- name: Restart voice-display-voice
+  ansible.builtin.systemd:
+    name: voice-display-voice
+    state: restarted
+  become: true

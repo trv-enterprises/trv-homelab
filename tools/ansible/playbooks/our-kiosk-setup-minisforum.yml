@@ -1,0 +1,227 @@
+---
+# Minisforum M1 Kiosk Setup Playbook
+#
+# Sets up a fresh Ubuntu 24.04 Server as a voice-controlled kiosk.
+# Uses proper Ansible modules (unlike the Jetson playbook which needs raw commands).
+#
+# Prerequisites:
+#   - Ubuntu 24.04 Server installed on Minisforum M1
+#   - SSH access configured for <user>
+#   - trv-kiosk-001 added to Ansible inventory
+#
+# Run:
+#   ansible-playbook playbooks/our-kiosk-setup-minisforum.yml -K
+#
+# Run Tailscale setup only:
+#   ansible-playbook playbooks/our-kiosk-setup-minisforum.yml -K --tags tailscale
+
+- name: Setup Minisforum M1 Kiosk
+  hosts: "{{ kiosk_target | default('trv-kiosk-001') }}"
+  become: true
+
+  vars:
+    kiosk_user: <user>
+    kiosk_deploy_dir: "/home/{{ kiosk_user }}/voice-display"
+    kiosk_src_dir: "{{ playbook_dir }}/../../../devices/our-kiosk"
+    node_major_version: "20"
+
+  tasks:
+    # ── Tailscale ──────────────────────────────
+    - name: Check if Tailscale is installed
+      ansible.builtin.command: which tailscale
+      register: tailscale_check
+      changed_when: false
+      failed_when: false
+      tags: tailscale
+
+    - name: Install Tailscale
+      ansible.builtin.shell: curl -fsSL https://tailscale.com/install.sh | sh
+      when: tailscale_check.rc != 0
+      tags: tailscale
+
+    - name: Check Tailscale status
+      ansible.builtin.command: tailscale status
+      register: ts_status
+      changed_when: false
+      failed_when: false
+      tags: tailscale
+
+    - name: Display Tailscale info
+      ansible.builtin.debug:
+        msg: "Tailscale status: {{ ts_status.stdout_lines | default(['not connected']) }}"
+      tags: tailscale
+
+    # ── System packages ────────────────────────
+    - name: Install system packages
+      ansible.builtin.apt:
+        name:
+          - xorg
+          - xinit
+          - xdotool
+          - chromium-browser
+          - pulseaudio
+          - alsa-utils
+          - python3-venv
+          - python3-pip
+          - python3-dev
+          - portaudio19-dev
+          - libsndfile1
+          - mpv
+          - curl
+          - wget
+          - git
+          - openssh-server
+        state: present
+        update_cache: true
+      tags: packages
+
+    # ── Node.js 20 LTS ────────────────────────
+    - name: Check Node.js version
+      ansible.builtin.command: node --version
+      register: node_version
+      changed_when: false
+      failed_when: false
+      tags: nodejs
+
+    - name: Add NodeSource repository
+      ansible.builtin.shell: curl -fsSL https://deb.nodesource.com/setup_{{ node_major_version }}.x | bash -
+      when: node_version.rc != 0 or not node_version.stdout.startswith('v' + node_major_version)
+      tags: nodejs
+
+    - name: Install Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+      when: node_version.rc != 0 or not node_version.stdout.startswith('v' + node_major_version)
+      tags: nodejs
+
+    # ── User setup ─────────────────────────────
+    - name: Add user to audio, video, tty groups
+      ansible.builtin.user:
+        name: "{{ kiosk_user }}"
+        groups: audio,video,tty
+        append: true
+      tags: user
+
+    - name: Enable linger for PulseAudio at boot
+      ansible.builtin.command: loginctl enable-linger {{ kiosk_user }}
+      changed_when: true
+      tags: user
+
+    # ── X11 kiosk config ──────────────────────
+    - name: Create xorg.conf.d directory
+      ansible.builtin.file:
+        path: /etc/X11/xorg.conf.d
+        state: directory
+        mode: "0755"
+      tags: x11
+
+    - name: Copy monitor config
+      ansible.builtin.copy:
+        src: "{{ kiosk_src_dir }}/scripts/10-monitor-minisforum.conf"
+        dest: /etc/X11/xorg.conf.d/10-monitor-minisforum.conf
+        mode: "0644"
+      tags: x11
+
+    - name: Set Xwrapper config
+      ansible.builtin.copy:
+        content: |
+          allowed_users=anybody
+          needs_root_rights=yes
+        dest: /etc/X11/Xwrapper.config
+        mode: "0644"
+      tags: x11
+
+    - name: Create .xinitrc
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          # Disable screen blanking and power management
+          xset s off
+          xset -dpms
+          xset s noblank
+
+          # Get screen resolution dynamically (works with any monitor)
+          SCREEN_RES=$(xdpyinfo | grep dimensions | awk '{print $2}')
+          WIDTH=$(echo $SCREEN_RES | cut -dx -f1)
+          HEIGHT=$(echo $SCREEN_RES | cut -dx -f2)
+
+          # Launch Chromium fullscreen at exact screen resolution
+          # Note: No window manager runs, so --kiosk alone won't fullscreen.
+          # Explicit --window-size and --window-position are required.
+          exec chromium-browser \
+              --kiosk \
+              --start-fullscreen \
+              --window-size=${WIDTH},${HEIGHT} \
+              --window-position=0,0 \
+              --disable-infobars \
+              --noerrdialogs \
+              --disable-session-crashed-bubble \
+              --disable-translate \
+              --no-first-run \
+              --fast \
+              --fast-start \
+              --disable-features=TranslateUI \
+              --disk-cache-dir=/tmp/chromium \
+              http://localhost:5174
+        dest: "/home/{{ kiosk_user }}/.xinitrc"
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: "0755"
+      tags: x11
+
+    # ── Deployment directory ──────────────────
+    - name: Create deployment directory
+      ansible.builtin.file:
+        path: "{{ kiosk_deploy_dir }}/sounds"
+        state: directory
+        owner: "{{ kiosk_user }}"
+        group: "{{ kiosk_user }}"
+        mode: "0755"
+      tags: deploy
+
+    # ── Python venv ───────────────────────────
+    - name: Create Python venv
+      ansible.builtin.command:
+        cmd: python3 -m venv {{ kiosk_deploy_dir }}/voice/venv
+        creates: "{{ kiosk_deploy_dir }}/voice/venv/bin/python"
+      become: true
+      become_user: "{{ kiosk_user }}"
+      tags: python
+
+    # ── Systemd services ─────────────────────
+    - name: Copy systemd services
+      ansible.builtin.copy:
+        src: "{{ kiosk_src_dir }}/systemd/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        mode: "0644"
+      loop:
+        - voice-display-ui.service
+        - voice-display-voice.service
+        - kiosk-display.service
+      notify: Reload systemd
+      tags: systemd
+
+    - name: Enable systemd services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+      loop:
+        - voice-display-ui.service
+        - voice-display-voice.service
+        - kiosk-display.service
+      tags: systemd
+
+    # ── Cron: mouse wiggle ───────────────────
+    - name: Set up mouse wiggle cron job
+      ansible.builtin.cron:
+        name: "Kiosk mouse wiggle to prevent display sleep"
+        user: "{{ kiosk_user }}"
+        minute: "*/10"
+        job: "DISPLAY=:0 xdotool mousemove_relative 1 0 && sleep 0.1 && DISPLAY=:0 xdotool mousemove_relative -- -1 0"
+      tags: cron
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true

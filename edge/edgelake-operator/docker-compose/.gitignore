@@ -1,0 +1,16 @@
+# Root-level environment configuration (machine/environment-specific)
+.env.root
+
+# Local environment overrides (machine-specific settings)
+**/.env.local
+
+# Docker Compose override for local development
+**/docker-compose.local.yml
+
+# Backup files
+**/*.bak
+**/*~
+
+# OS files
+.DS_Store
+Thumbs.db

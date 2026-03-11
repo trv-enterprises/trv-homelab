@@ -1,0 +1,108 @@
+---
+# Categorize detected services into application groups
+
+- name: Initialize app inventory
+  ansible.builtin.set_fact:
+    app_inventory:
+      dashboard: []
+      edgelake: []
+      open_horizon: []
+      tsstore: []
+      collectors: []
+      mosquitto: []
+      k3s: []
+      docker_registry: []
+      other: []
+
+# Dashboard detection
+- name: Detect Dashboard containers
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'dashboard': app_inventory.dashboard + [{'name': item.name, 'type': 'docker', 'image': item.image, 'status': item.status, 'ports': item.ports}]}) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  when: "'dashboard-' in item.name or '<github-username>/dashboard' in item.image"
+
+# EdgeLake detection
+- name: Detect EdgeLake containers
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'edgelake': app_inventory.edgelake + [{'name': item.name, 'type': 'docker', 'image': item.image, 'status': item.status, 'ports': item.ports}]}) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  when: "'edgelake' in item.name or 'anylogco/edgelake' in item.image"
+
+# Open Horizon detection (Docker containers)
+- name: Detect Open Horizon containers
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'open_horizon': app_inventory.open_horizon + [{'name': item.name, 'type': 'docker', 'status': item.status, 'ports': item.ports}]}) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  when: >
+    ('exchange-api' in item.name or
+    'agbot' in item.name or
+    'css-api' in item.name or
+    'keycloak' in item.name or
+    'fdo-owner' in item.name or
+    'oh-postgres' in item.name or
+    'oh-mongo' in item.name) and
+    'dashboard-' not in item.name
+
+# Open Horizon agent (systemd)
+- name: Detect horizon agent
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'open_horizon': app_inventory.open_horizon + [{'name': 'horizon', 'type': 'systemd', 'status': 'running'}]}) }}"
+  when: "'horizon' in system_services"
+
+# ts-store detection (system service)
+- name: Detect tsstore system service
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'tsstore': app_inventory.tsstore + [{'name': 'tsstore', 'type': 'systemd-system', 'status': 'running'}]}) }}"
+  when: "'tsstore' in system_services"
+
+# ts-store detection (user service)
+- name: Detect tsstore user service
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'tsstore': app_inventory.tsstore + [{'name': 'tsstore', 'type': 'systemd-user', 'status': 'running'}]}) }}"
+  when: "'tsstore' in user_services"
+
+# Data collectors (user services)
+- name: Detect data collectors
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'collectors': app_inventory.collectors + [{'name': item, 'type': 'systemd-user', 'status': 'running'}]}) }}"
+  loop:
+    - sensehat-to-tsstore
+    - system-stats-to-tsstore
+    - journal-to-tsstore
+    - shelly-to-tsstore
+  when: item in user_services
+
+# Data collectors (system services)
+- name: Detect system-level collectors
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'collectors': app_inventory.collectors + [{'name': item, 'type': 'systemd-system', 'status': 'running'}]}) }}"
+  loop:
+    - system-stats
+    - journal-logs
+  when: item in system_services
+
+# Mosquitto detection (Docker)
+- name: Detect Mosquitto containers
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'mosquitto': app_inventory.mosquitto + [{'name': item.name, 'type': 'docker', 'image': item.image, 'status': item.status, 'ports': item.ports}]}) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  when: "'mosquitto' in item.name or 'eclipse-mosquitto' in item.image"
+
+# Mosquitto detection (systemd)
+- name: Detect Mosquitto systemd
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'mosquitto': app_inventory.mosquitto + [{'name': 'mosquitto', 'type': 'systemd', 'status': 'running', 'port': 1883}]}) }}"
+  when: "'mosquitto' in system_services"
+
+# k3s detection
+- name: Detect k3s
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'k3s': app_inventory.k3s + [{'name': 'k3s', 'type': 'systemd', 'status': 'running', 'port': 6443}]}) }}"
+  when: "'k3s' in system_services"
+
+# Docker Registry detection
+- name: Detect Docker Registry
+  ansible.builtin.set_fact:
+    app_inventory: "{{ app_inventory | combine({'docker_registry': app_inventory.docker_registry + [{'name': item.name, 'type': 'docker', 'status': item.status, 'ports': item.ports}]}) }}"
+  loop: "{{ docker_containers | default([]) }}"
+  when: "'registry' in item.name or 'registry:' in item.image"

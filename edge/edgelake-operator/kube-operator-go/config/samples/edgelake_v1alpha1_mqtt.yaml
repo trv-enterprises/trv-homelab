@@ -1,0 +1,77 @@
+# EdgeLake Operator with MQTT data ingestion
+# Connects to an MQTT broker and ingests IoT/sensor data
+apiVersion: edgelake.trv.io/v1alpha1
+kind: EdgeLakeOperator
+metadata:
+  name: edgelake-operator-mqtt
+  namespace: iot-data
+spec:
+  metadata:
+    hostname: edgelake-mqtt-operator
+    appName: edgelake-mqtt-operator
+    serviceType: NodePort
+
+  image:
+    repository: anylogco/edgelake-network
+    tag: "1.3.2500"
+
+  persistence:
+    enabled: true
+    anylog:
+      size: 5Gi
+    blockchain:
+      size: 1Gi
+    data:
+      size: 20Gi
+    scripts:
+      size: 1Gi
+
+  resources:
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+
+  nodeConfigs:
+    general:
+      nodeType: operator
+      nodeName: edgelake-mqtt-operator
+      companyName: "IoT Company"
+
+    networking:
+      anylogServerPort: 32148
+      anylogRESTPort: 32149
+      anylogBrokerPort: 32150
+
+    database:
+      dbType: sqlite
+
+    blockchain:
+      ledgerConn: "master-node-ip:32048"
+      blockchainSource: master
+
+    operator:
+      clusterName: iot-cluster
+      defaultDBMS: iot_data
+      enablePartitions: true
+      partitionInterval: "1 day"
+      partitionKeep: 7
+
+    mqtt:
+      enableMQTT: true
+      mqttBroker: "mqtt-broker.iot-data.svc.cluster.local"
+      mqttPort: 1883
+      mqttLog: false
+      msgTopic: "sensors/#"
+      msgDBMS: iot_data
+      msgTable: "bring [table]"
+      msgTimestampColumn: "bring [timestamp]"
+      msgValueColumn: "bring [value]"
+      msgValueColumnType: float
+
+    advanced:
+      writeImmediate: false
+      thresholdTime: "30 seconds"
+      thresholdVolume: "100KB"

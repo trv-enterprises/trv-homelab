@@ -1,0 +1,19 @@
+[Unit]
+Description=Voice Display Voice Pipeline
+After=network.target voice-display-ui.service
+
+[Service]
+Type=simple
+User={{ voice_display_user }}
+WorkingDirectory={{ voice_display_deploy_dir }}/voice
+ExecStart={{ voice_display_deploy_dir }}/voice/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+{% if anthropic_api_key is defined %}
+Environment=ANTHROPIC_API_KEY={{ anthropic_api_key }}
+{% endif %}
+Environment=PULSE_AUDIO_DEVICE={{ voice_audio_device }}
+
+[Install]
+WantedBy=multi-user.target

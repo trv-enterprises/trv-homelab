@@ -1,0 +1,16 @@
+[Unit]
+Description=System Stats Collector for ts-store
+After=tsstore.service
+Requires=tsstore.service
+
+[Service]
+Type=simple
+User=<user>
+ExecStartPre=/bin/sleep 5
+ExecStart=/home/<user>/bin/system-stats -socket /var/run/tsstore/tsstore.sock -store system-stats -interval 20
+Restart=always
+RestartSec=10
+Environment=TSSTORE_API_KEY=CHANGEME
+
+[Install]
+WantedBy=multi-user.target

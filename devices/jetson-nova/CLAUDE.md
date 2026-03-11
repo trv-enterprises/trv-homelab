@@ -1,0 +1,1 @@
+- my nano jeston's ip address is <cam-driveway-lan-ip>1
