@@ -11,7 +11,7 @@ This directory covers the **ts-store and system-stats** services running on trv-
 | tsstore | Native ts-store binary (port 21080) |
 | system-stats | CPU/memory/disk/network collector |
 | journal-logs | Journal log streamer |
-| mqtt-sink-system-stats | Drains stats to Mosquitto on trv-pi-002 |
+| mqtt-sink-system-stats | Drains stats to MQTT broker |
 
 ## Files
 

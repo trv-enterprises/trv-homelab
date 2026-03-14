@@ -17,9 +17,6 @@ all:
           ansible_host: <tailscale-ip>
           lan_ip: <lan-ip>
           role: ts-store + SenseHat
-        pi-002:
-          ansible_host: <tailscale-ip>
-          role: Mosquitto + ts-store + Shelly
 
     kiosk:
       hosts:

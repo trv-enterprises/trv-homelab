@@ -1,6 +1,6 @@
-# Mosquitto MQTT Broker for trv-pi-002
+# Mosquitto MQTT Broker
 
-MQTT broker on trv-pi-002 (<pi-002-tailscale-ip>) for receiving data from ts-store sinks.
+Generic Mosquitto MQTT broker deployment for receiving data from ts-store sinks and IoT devices.
 
 ## Installation
 
@@ -93,7 +93,7 @@ mosquitto_sub -h localhost -t "trv-srv-001/system-stats" -C 1
 mosquitto_sub -h localhost -t "trv-srv-001/system-stats" -C 10
 
 # Subscribe from a remote machine
-mosquitto_sub -h <pi-002-tailscale-ip> -t "trv-srv-001/system-stats" -v
+mosquitto_sub -h <broker-ip> -t "trv-srv-001/system-stats" -v
 ```
 
 ### Publishing

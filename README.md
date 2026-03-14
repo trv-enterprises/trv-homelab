@@ -9,7 +9,6 @@ Infrastructure and deployment configurations for the TRV homelab network.
 | trv-srv-002 | <proxmox-tailscale-ip> | Proxmox host | LXC containers (dashboard, services, nvr, photos) |
 | trv-kiosk-001 | <kiosk-tailscale-ip> | Kiosk | Voice-controlled smart display |
 | trv-pi-001 | <pi-001-tailscale-ip> | Raspberry Pi | ts-store, SenseHat |
-| trv-pi-002 | <pi-002-tailscale-ip> | Raspberry Pi | ts-store, Mosquitto, Shelly |
 | Synology DS1525+ | <synology-tailscale-ip> | NAS | NFS shares, Proxmox backup target |
 | Sonoff Zigbee 3.0 | — | USB dongle | Zigbee coordinator (on trv-srv-002, passed to services LXC) |
 
@@ -31,7 +30,6 @@ trv-homelab/
 │   ├── nvr/                # Frigate + Scrypted (NVR LXC)
 │   ├── synology/           # Synology DS1525+ NAS
 │   ├── trv-pi-001/         # Pi: ts-store + SenseHat
-│   ├── trv-pi-002/         # Pi: Mosquitto broker
 │   └── trv-srv-001/        # Hub: ts-store stats
 │
 ├── tools/                  # Development & operations tools

@@ -16,7 +16,7 @@ Native ts-store installation with system-stats collector on trv-srv-001.
 
 - **mqtt-sink**: Drains system-stats to MQTT broker
   - Reads from ts-store HTTP API
-  - Publishes to Mosquitto on trv-pi-002 (<pi-002-tailscale-ip>)
+  - Publishes to MQTT broker
   - Maintains cursor for crash recovery
   - Topic: `trv-srv-001/system-stats`
 
@@ -126,7 +126,7 @@ curl -s -H "X-API-Key: <api-key>" \
 - **Retention**: depends on log volume
 
 ### mqtt-sink
-- **Broker**: tcp://<pi-002-tailscale-ip>:1883 (trv-pi-002)
+- **Broker**: tcp://<mqtt-broker-ip>:1883
 - **Topic**: trv-srv-001/system-stats
 - **Cursor file**: /var/lib/mqtt-sink/system-stats.cursor
 

@@ -49,4 +49,4 @@ python3 shelly-to-tsstore.py
 
 ## Deployment
 
-See `devices/trv-pi-002/` for a complete deployment example with systemd service.
+**Note:** Shelly plugs are now integrated via Zigbee2MQTT and Homebridge (see `edge/zigbee2mqtt/` and `edge/homebridge/`). This script is for legacy Wi-Fi-mode polling.
