@@ -1,7 +1,7 @@
 # trv-pi-001 Deployment
 
 Deployment artifacts for tsstore on trv-pi-001 (Raspberry Pi).
-Primarily used for testing the Dashboard
+Primarily used for testing the dashboard and ts-store.
 
 ## Directory Layout on Pi
 
