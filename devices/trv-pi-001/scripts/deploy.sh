@@ -6,7 +6,7 @@
 set -euo pipefail
 
 VERSION="${1:?Usage: ./deploy.sh <version>}"
-REPO="<github-username>/ts-store"
+REPO="trv-enterprises/ts-store"
 BINARY_NAME="tsstore-linux-arm64"
 INSTALL_DIR="$HOME/bin"
 TSSTORE_DIR="$HOME/tsstore"
