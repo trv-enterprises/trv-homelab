@@ -7,7 +7,7 @@ REMOTE_DIR := /opt/services
 SERVICE := weather-poller
 ANSIBLE_DIR := ../../tools/ansible
 
-GHCR_REGISTRY := ghcr.io/<github-username>
+GHCR_REGISTRY := ghcr.io/trv-enterprises
 IMAGE := $(GHCR_REGISTRY)/weather-poller:latest
 
 SHELL = /usr/bin/env bash -o pipefail
@@ -25,7 +25,7 @@ build: ## Build Docker image for linux/amd64
 
 .PHONY: push
 push: ## Push image to GHCR
-	@echo "$${TOM_GH_TOKEN}" | docker login ghcr.io -u <github-username> --password-stdin
+	@echo "$${TOM_GH_TOKEN}" | docker login ghcr.io -u trv-enterprises --password-stdin
 	docker push $(IMAGE)
 
 .PHONY: build-push

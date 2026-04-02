@@ -2,7 +2,7 @@
 # Dashboard deployment configuration
 
 # GitHub Container Registry
-ghcr_registry: ghcr.io/<github-username>
+ghcr_registry: ghcr.io/trv-enterprises
 
 # Image names
 dashboard_server_image: "{{ ghcr_registry }}/dashboard-server"

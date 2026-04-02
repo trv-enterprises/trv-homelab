@@ -22,7 +22,7 @@
 
 - name: Login to GitHub Container Registry
   ansible.builtin.shell:
-    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u <github-username> --password-stdin
+    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u trv-enterprises --password-stdin
   register: docker_login
   changed_when: false
   no_log: true

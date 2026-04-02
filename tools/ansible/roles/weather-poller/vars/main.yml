@@ -2,7 +2,7 @@
 # Weather Poller deployment configuration
 
 # GitHub Container Registry
-ghcr_registry: ghcr.io/<github-username>
+ghcr_registry: ghcr.io/trv-enterprises
 
 # Image
 weather_poller_image: "{{ ghcr_registry }}/weather-poller"

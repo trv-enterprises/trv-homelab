@@ -1,4 +1,4 @@
-module github.com/<github-username>/trv-homelab/edge/weather-poller
+module github.com/trv-enterprises/trv-homelab/edge/weather-poller
 
 go 1.25.5
 

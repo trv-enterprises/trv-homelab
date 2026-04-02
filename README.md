@@ -78,4 +78,4 @@ make deploy             # Deploy config + codec to Homebridge container
 ## Related Repos
 
 - [trv-kiosk](https://github.com/trv-enterprises/trv-kiosk) — Voice-controlled smart display (React + Python)
-- [ts-store](https://github.com/<github-username>/ts-store) — Time-series store binary
+- [ts-store](https://github.com/trv-enterprises/ts-store) — Time-series store binary

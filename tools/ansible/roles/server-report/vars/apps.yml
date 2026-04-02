@@ -8,7 +8,7 @@ app_definitions:
         - "dashboard-caddy"
         - "dashboard-mongodb"
         - "dashboard-redis"
-        - "<github-username>/dashboard"
+        - "trv-enterprises/dashboard"
       ports:
         - 80     # caddy HTTP
         - 443    # caddy HTTPS

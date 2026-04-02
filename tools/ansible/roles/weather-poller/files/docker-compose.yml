@@ -25,7 +25,7 @@ services:
       - mosquitto
 
   weather-poller:
-    image: ghcr.io/<github-username>/weather-poller:latest
+    image: ghcr.io/trv-enterprises/weather-poller:latest
     restart: unless-stopped
     env_file:
       - weather-poller.env

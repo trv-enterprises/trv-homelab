@@ -15,7 +15,7 @@
   ansible.builtin.set_fact:
     app_inventory: "{{ app_inventory | combine({'dashboard': app_inventory.dashboard + [{'name': item.name, 'type': 'docker', 'image': item.image, 'status': item.status, 'ports': item.ports}]}) }}"
   loop: "{{ docker_containers | default([]) }}"
-  when: "'dashboard-' in item.name or '<github-username>/dashboard' in item.image"
+  when: "'dashboard-' in item.name or 'trv-enterprises/dashboard' in item.image"
 
 # ts-store detection (system service)
 - name: Detect tsstore system service
