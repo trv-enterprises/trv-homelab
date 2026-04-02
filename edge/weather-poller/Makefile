@@ -25,7 +25,7 @@ build: ## Build Docker image for linux/amd64
 
 .PHONY: push
 push: ## Push image to GHCR
-	@echo "$${TOM_GH_TOKEN}" | docker login ghcr.io -u trv-enterprises --password-stdin
+	@echo "$${TRVE_GH_TOKEN}" | docker login ghcr.io -u trv-enterprises --password-stdin
 	docker push $(IMAGE)
 
 .PHONY: build-push
