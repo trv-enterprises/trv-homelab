@@ -1,0 +1,17 @@
+---
+# Alert Engine Deployment Playbook
+#
+# Requires:
+#   - alert_engine_rules_file: path to rules.yaml on controller
+#
+# Deploy:
+#   ansible-playbook playbooks/alert-engine-deploy.yml \
+#     -e "alert_engine_rules_file=/path/to/rules.yaml"
+
+- name: Deploy Alert Engine
+  hosts: services
+  become: false
+
+  roles:
+    - services-stack
+    - alert-engine

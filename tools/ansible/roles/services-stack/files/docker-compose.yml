@@ -34,8 +34,32 @@ services:
     depends_on:
       - mosquitto
 
+  homebridge:
+    image: homebridge/homebridge:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - homebridge_data:/homebridge
+    environment:
+      - TZ=America/Chicago
+      - HOMEBRIDGE_CONFIG_UI=1
+      - HOMEBRIDGE_CONFIG_UI_PORT=8581
+    depends_on:
+      - mosquitto
+
+  alert-engine:
+    image: ghcr.io/trv-enterprises/alert-engine:latest
+    restart: unless-stopped
+    volumes:
+      - ./rules.yaml:/etc/alert-engine/rules.yaml:ro
+    environment:
+      - TZ=America/Chicago
+    depends_on:
+      - mosquitto
+
 volumes:
   mosquitto_config:
   mosquitto_data:
   mosquitto_log:
   zigbee2mqtt_data:
+  homebridge_data:

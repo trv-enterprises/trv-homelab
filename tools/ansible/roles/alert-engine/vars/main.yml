@@ -1,0 +1,9 @@
+---
+# Alert Engine deployment configuration
+
+# Image
+alert_engine_image: ghcr.io/trv-enterprises/alert-engine
+alert_engine_version: latest
+
+# Deployment directory (shared services stack)
+services_deploy_dir: /opt/services

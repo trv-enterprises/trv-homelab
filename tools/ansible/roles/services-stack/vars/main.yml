@@ -1,0 +1,5 @@
+---
+# Services stack configuration
+
+# Deployment directory (shared by all services on this host)
+services_deploy_dir: /opt/services

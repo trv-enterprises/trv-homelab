@@ -37,6 +37,7 @@ ansible-playbook playbooks/server-report.yml
 | `our-kiosk-deploy.yml` | Deploy kiosk voice + display |
 | `our-kiosk-setup.yml` | Initial kiosk setup (Node.js) |
 | `our-kiosk-setup-minisforum.yml` | Minisforum kiosk setup (X11, Node, Python) |
+| `alert-engine-deploy.yml` | Deploy alert engine (Docker, GHCR) |
 | `server-report.yml` | Generate infrastructure reports |
 
 ## Directory Structure
@@ -50,6 +51,8 @@ tools/ansible/
 │       └── vault.yml.example            # Vault template (API keys, tokens)
 ├── playbooks/                           # Deployment and reporting playbooks
 ├── roles/
+│   ├── services-stack/                  # Shared docker-compose for services LXC
+│   ├── alert-engine/                    # Alert engine deployment
 │   ├── dashboard/                       # Dashboard app deployment
 │   ├── weather-poller/                  # Weather poller deployment
 │   ├── tsstore/                         # ts-store binary deployment
@@ -58,12 +61,76 @@ tools/ansible/
 └── reports/                             # Generated reports (gitignored)
 ```
 
-## Using with homelab-deploy
+## Two-Repo Workflow (Recommended)
 
-If you keep your real inventory in a separate private repo (recommended), point to it with `-i`:
+This repository contains all Ansible roles, playbooks, and example configs with placeholder
+values. Real deployment requires a **private deploy repo** with your actual inventory,
+secrets, and deployment-specific configuration files.
 
-```bash
-ansible-playbook -i ~/homelab-deploy/inventory playbooks/dashboard-deploy.yml
+### What goes where
+
+| Content | Repository |
+|---------|-----------|
+| Ansible roles, playbooks, templates | trv-homelab (public) |
+| Example configs with placeholder values | trv-homelab (public) |
+| Real IP addresses, hostnames | your deploy repo (private) |
+| Vault secrets (API keys, tokens) | your deploy repo (private) |
+| Deployment-specific config files (alert rules, etc.) | your deploy repo (private) |
+
+### Setup
+
+1. **Clone trv-homelab** (don't fork -- pull upstream updates directly):
+   ```bash
+   git clone https://github.com/trv-enterprises/trv-homelab.git
+   ```
+
+2. **Create your deploy repo** with this structure:
+   ```
+   my-homelab-deploy/
+   ├── Makefile                    # Targets wrapping ansible-playbook
+   ├── ansible.cfg                 # Points to your inventory + vault
+   ├── inventory/
+   │   ├── hosts.yml               # Real IPs for your hosts
+   │   └── group_vars/all/
+   │       └── vault.yml           # Encrypted secrets (GHCR token, API keys)
+   ├── host_vars/                  # Per-host variable overrides
+   └── files/                      # Deployment-specific config files
+       └── alert-engine/
+           └── rules.yaml          # Your actual alert rules
+   ```
+
+3. **Copy and fill in templates**:
+   ```bash
+   # From trv-homelab/tools/ansible/
+   cp inventory/hosts.yml.example ~/my-homelab-deploy/inventory/hosts.yml
+   cp inventory/group_vars/all/vault.yml.example ~/my-homelab-deploy/inventory/group_vars/all/vault.yml
+   ansible-vault encrypt ~/my-homelab-deploy/inventory/group_vars/all/vault.yml
+
+   # Copy example alert rules and customize with your device names
+   cp ../../edge/sensor-alert-engine/rules.yaml ~/my-homelab-deploy/files/alert-engine/rules.yaml
+   ```
+
+4. **Run playbooks** from your deploy repo using `-i` to point at your inventory:
+   ```bash
+   ansible-playbook -i inventory \
+     ../trv-homelab/tools/ansible/playbooks/weather-poller-deploy.yml
+   ```
+
+### Example Makefile
+
+```makefile
+PLAYBOOK_DIR = ../trv-homelab/tools/ansible/playbooks
+INVENTORY = inventory
+
+deploy-weather:
+    ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/weather-poller-deploy.yml
+
+deploy-alert-engine:
+    ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/alert-engine-deploy.yml \
+        -e "alert_engine_rules_file=$(CURDIR)/files/alert-engine/rules.yaml"
+
+deploy-dashboard:
+    ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/dashboard-deploy.yml
 ```
 
 ## Adding New Applications to Reports

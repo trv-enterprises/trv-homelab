@@ -1,0 +1,58 @@
+---
+# Alert Engine deployment tasks
+# Deploys rules.yaml and starts the alert-engine container
+
+- name: Validate rules file variable
+  ansible.builtin.fail:
+    msg: "alert_engine_rules_file is required. Pass via -e 'alert_engine_rules_file=path/to/rules.yaml'"
+  when: alert_engine_rules_file is not defined or alert_engine_rules_file == ""
+
+- name: Deploy rules.yaml
+  ansible.builtin.copy:
+    src: "{{ alert_engine_rules_file }}"
+    dest: "{{ services_deploy_dir }}/rules.yaml"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  become: true
+  register: rules_file_result
+
+- name: Pull latest alert-engine image
+  ansible.builtin.command:
+    cmd: docker compose pull alert-engine
+    chdir: "{{ services_deploy_dir }}"
+  register: pull_result
+  changed_when: "'Downloaded' in pull_result.stderr or 'Pulled' in pull_result.stderr"
+
+- name: Start/update alert-engine
+  ansible.builtin.command:
+    cmd: docker compose up -d alert-engine
+    chdir: "{{ services_deploy_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Wait for alert-engine to start
+  ansible.builtin.command:
+    cmd: docker compose ps alert-engine --format json
+    chdir: "{{ services_deploy_dir }}"
+  register: compose_ps
+  until: "'running' in compose_ps.stdout"
+  retries: 6
+  delay: 5
+  changed_when: false
+
+- name: Show recent logs
+  ansible.builtin.command:
+    cmd: docker compose logs --tail=10 alert-engine
+    chdir: "{{ services_deploy_dir }}"
+  register: engine_logs
+  changed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      Alert engine deployed successfully!
+      Image: {{ alert_engine_image }}:{{ alert_engine_version }}
+      Rules: {{ alert_engine_rules_file }}
+      Recent logs:
+      {{ engine_logs.stdout }}

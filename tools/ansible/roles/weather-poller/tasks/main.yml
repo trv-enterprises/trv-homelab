@@ -1,22 +1,10 @@
 ---
 # Weather Poller deployment tasks
 
-- name: Validate GHCR token
-  ansible.builtin.fail:
-    msg: "ghcr_token is required for pulling from GitHub Container Registry."
-  when: ghcr_token is not defined or ghcr_token == ""
-
 - name: Validate Visual Crossing API key
   ansible.builtin.fail:
     msg: "visual_crossing_key is required. Set in vault."
   when: visual_crossing_key is not defined or visual_crossing_key == ""
-
-- name: Login to GitHub Container Registry
-  ansible.builtin.shell:
-    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u trv-enterprises --password-stdin
-  register: docker_login
-  changed_when: false
-  no_log: true
 
 - name: Deploy weather-poller env file
   ansible.builtin.template:
@@ -27,16 +15,6 @@
     mode: '0600'
   become: true
   register: env_file
-
-- name: Deploy docker-compose.yml
-  ansible.builtin.copy:
-    src: docker-compose.yml
-    dest: "{{ services_deploy_dir }}/docker-compose.yml"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: '0644'
-  become: true
-  register: compose_file
 
 - name: Pull latest weather-poller image
   ansible.builtin.command:
