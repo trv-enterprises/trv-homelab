@@ -28,7 +28,7 @@
 
   vars:
     kiosk_deploy_dir: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/voice-display"
-    kiosk_src_dir: "{{ playbook_dir }}/../../../devices/our-kiosk"
+    kiosk_src_dir: "{{ playbook_dir }}/../../../../trv-kiosk"
     kiosk_port: 5174
     kiosk_api_url: "http://<dashboard-tailscale-ip>:3001"
     kiosk_websocket_port: 8765
@@ -69,12 +69,6 @@
           - "--exclude=venv"
           - "--exclude=__pycache__"
           - "--exclude=*.pyc"
-
-    - name: Sync sounds
-      ansible.posix.synchronize:
-        src: "{{ kiosk_src_dir }}/sounds/"
-        dest: "~/voice-display/sounds/"
-        delete: true
 
     - name: Sync systemd services
       ansible.posix.synchronize:
