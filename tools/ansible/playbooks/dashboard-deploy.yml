@@ -15,3 +15,31 @@
 
   roles:
     - dashboard
+
+- name: Clear kiosk browser cache
+  hosts: kiosk
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Stop kiosk display
+      ansible.builtin.systemd:
+        name: kiosk-display
+        state: stopped
+      failed_when: false
+
+    - name: Clear Chromium cache and profile
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /home/{{ ansible_user }}/.config/chromium
+        - /home/{{ ansible_user }}/.cache/chromium
+        - /home/{{ ansible_user }}/.local/share/chromium
+        - /tmp/chromium
+
+    - name: Start kiosk display
+      ansible.builtin.systemd:
+        name: kiosk-display
+        state: started
+      failed_when: false
