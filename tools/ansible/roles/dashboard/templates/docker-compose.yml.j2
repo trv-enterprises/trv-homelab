@@ -32,12 +32,9 @@ services:
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
-      - DASHBOARD_REDIS_ADDR=redis:6379
       - DASHBOARD_LLM_API_KEY={{ anthropic_api_key }}
     depends_on:
       mongodb:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -59,19 +56,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
 volumes:
   mongodb_data:
-  redis_data:
   caddy_data:
   caddy_config:
