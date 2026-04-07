@@ -33,9 +33,7 @@
         path: "{{ item }}"
         state: absent
       loop:
-        - /home/{{ ansible_user }}/.config/chromium
-        - /home/{{ ansible_user }}/.cache/chromium
-        - /home/{{ ansible_user }}/.local/share/chromium
+        - /home/{{ ansible_user }}/snap/chromium/common/chromium/Default
         - /tmp/chromium
 
     - name: Start kiosk display
