@@ -5,15 +5,11 @@
 # The display shows a clock by default and responds to voice commands
 # to switch views, show dashboards, set cooking timers, etc.
 #
-# Note: Jetson Nano has Python 3.6 which is too old for standard Ansible modules,
-# so we use gather_facts: false and raw/shell commands.
-# For Minisforum setup, use our-kiosk-setup-minisforum.yml instead.
+# Deploys to trv-kiosk-001 (Minisforum M1) by default.
+# Override with -e kiosk_target=<host> for other targets.
 #
-# Deploy to Jetson (default):
+# Deploy (default: trv-kiosk-001):
 #   ansible-playbook playbooks/our-kiosk-deploy.yml
-#
-# Deploy to Minisforum:
-#   ansible-playbook playbooks/our-kiosk-deploy.yml -e kiosk_target=trv-kiosk-001
 #
 # Deploy with sudo password (for systemd service setup):
 #   ansible-playbook playbooks/our-kiosk-deploy.yml -K
@@ -22,7 +18,7 @@
 #   ansible-playbook playbooks/our-kiosk-deploy.yml -K -e kiosk_target=trv-kiosk-001 --tags setup-systemd
 
 - name: Deploy Our Kiosk
-  hosts: "{{ kiosk_target | default('trv-jetson-nano') }}"
+  hosts: "{{ kiosk_target | default('trv-kiosk-001') }}"
   gather_facts: false
   become: false
 
@@ -117,7 +113,7 @@
 
 # Optional: Set up systemd services (requires sudo password with -K)
 - name: Setup systemd services
-  hosts: "{{ kiosk_target | default('trv-jetson-nano') }}"
+  hosts: "{{ kiosk_target | default('trv-kiosk-001') }}"
   gather_facts: false
   become: true
   tags:
