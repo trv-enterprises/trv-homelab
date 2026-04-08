@@ -10,7 +10,7 @@ dashboard_client_image: "{{ ghcr_registry }}/dashboard-client"
 
 # Default version (override with --extra-vars "dashboard_version=0.3.0")
 # Note: GHCR tags do NOT have 'v' prefix
-dashboard_version: 0.4.6
+dashboard_version: 0.4.8
 
 # Deployment directory on target
 dashboard_deploy_dir: /opt/dashboard

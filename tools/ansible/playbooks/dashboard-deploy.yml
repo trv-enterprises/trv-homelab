@@ -19,25 +19,20 @@
 - name: Clear kiosk browser cache
   hosts: kiosk
   gather_facts: false
-  become: true
+  become: false
+
+  vars:
+    ansible_user: root
 
   tasks:
     - name: Stop kiosk display
-      ansible.builtin.systemd:
-        name: kiosk-display
-        state: stopped
+      ansible.builtin.raw: systemctl stop kiosk-display
       failed_when: false
 
-    - name: Clear Chromium cache and profile
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /home/{{ ansible_user }}/snap/chromium/common/chromium/Default
-        - /tmp/chromium
+    - name: Clear Chromium snap cache
+      ansible.builtin.raw: rm -rf /home/tviviano/snap/chromium/common/chromium/Default /tmp/chromium
+      failed_when: false
 
     - name: Start kiosk display
-      ansible.builtin.systemd:
-        name: kiosk-display
-        state: started
+      ansible.builtin.raw: systemctl start kiosk-display
       failed_when: false
