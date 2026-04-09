@@ -187,9 +187,46 @@ func pollCurrent(cfg Config, client mqtt.Client) {
 		publish(client, "weather/current", weather.CurrentConditions)
 	}
 
-	// Publish today's hourly forecast
+	// Publish next 24 hours of hourly forecast (spanning today + tomorrow)
 	if len(weather.Days) > 0 {
-		publish(client, "weather/forecast/hourly", weather.Days[0].Hours)
+		// Load the weather location's timezone for correct hour comparison
+		loc := time.UTC
+		if weather.Timezone != "" {
+			if l, err := time.LoadLocation(weather.Timezone); err == nil {
+				loc = l
+			}
+		}
+		now := time.Now().In(loc)
+		currentHour := now.Hour()
+
+		var allHours []HourConditions
+		for i, day := range weather.Days {
+			if i >= 2 {
+				break // Only need today and tomorrow
+			}
+			for _, h := range day.Hours {
+				// Prefix each hour's datetime with the day's date
+				h.Datetime = day.Datetime + "T" + h.Datetime
+				allHours = append(allHours, h)
+			}
+		}
+
+		// Filter to upcoming hours (starting from current hour in the weather location's timezone)
+		cutoff := time.Date(now.Year(), now.Month(), now.Day(), currentHour, 0, 0, 0, loc)
+		var upcoming []HourConditions
+		for _, h := range allHours {
+			t, err := time.ParseInLocation("2006-01-02T15:04:05", h.Datetime, loc)
+			if err != nil {
+				continue
+			}
+			if !t.Before(cutoff) {
+				upcoming = append(upcoming, h)
+			}
+			if len(upcoming) >= 24 {
+				break
+			}
+		}
+		publish(client, "weather/forecast/hourly", upcoming)
 
 		// Publish daily forecast (up to 7 days)
 		maxDays := 7

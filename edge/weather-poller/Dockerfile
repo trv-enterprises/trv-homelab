@@ -6,6 +6,6 @@ COPY main.go .
 RUN CGO_ENABLED=0 go build -o /weather-poller .
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /weather-poller /usr/local/bin/weather-poller
 ENTRYPOINT ["weather-poller"]
