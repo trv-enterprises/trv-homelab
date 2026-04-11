@@ -24,11 +24,23 @@
 
   vars:
     kiosk_deploy_dir: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/voice-display"
+    kiosk_home: "/home/{{ ansible_user }}"
     kiosk_src_dir: "{{ playbook_dir }}/../../../../trv-kiosk"
     kiosk_port: 5174
-    kiosk_api_url: "http://<dashboard-tailscale-ip>:3001"
+    # Dashboard server (LXC 100 on trv-srv-002). Override via -e to deploy
+    # against a different backend.
+    kiosk_api_url: "{{ dashboard_api_url | default('http://100.97.221.61:3001') }}"
     kiosk_websocket_port: 8765
-    kiosk_audio_device: "plughw:2,0"
+    # MQTT broker the voice commander subscribes to for frigate/weather/sensor alerts.
+    # Services LXC on trv-srv-002. Plain MQTT (no auth) on the LAN.
+    kiosk_mqtt_broker: "{{ services_mqtt_broker | default('100.112.38.96') }}"
+    kiosk_mqtt_port: 1883
+    # ALSA output device for voice/alert/chime playback. The index may
+    # change across boots; use a named device if you have one.
+    kiosk_alert_audio_device: "plughw:1,0"
+    # USB mic (EMEET M0 Plus) discovery
+    kiosk_audio_device_name: "EMEET"
+    kiosk_audio_device_index: 11
     # EMEET M0 Plus mic gain: numid=6, range 0-4 (-6dB to +6dB), 3 = +3dB
     kiosk_mic_gain: 3
 
@@ -65,6 +77,22 @@
           - "--exclude=venv"
           - "--exclude=__pycache__"
           - "--exclude=*.pyc"
+          # config.yaml is rendered by the template task below with real
+          # values from inventory. Don't let rsync clobber it with the
+          # (intentionally broken) placeholder copy from the repo.
+          - "--exclude=config.yaml"
+          - "--exclude=config.yaml.j2"
+          - "--exclude=config.yaml.example"
+
+    # Render the real voice/config.yaml from the template using inventory
+    # values. This replaces the placeholder file that used to live in the
+    # public repo with real MQTT broker, dashboard URL, and user-specific
+    # sound paths.
+    - name: Render voice config.yaml from template
+      ansible.builtin.template:
+        src: "{{ kiosk_src_dir }}/voice/config.yaml.j2"
+        dest: "~/voice-display/voice/config.yaml"
+        mode: '0644'
 
     - name: Sync systemd services
       ansible.posix.synchronize:
