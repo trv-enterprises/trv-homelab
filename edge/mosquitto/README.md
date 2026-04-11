@@ -2,6 +2,15 @@
 
 Generic Mosquitto MQTT broker deployment for receiving data from ts-store sinks and IoT devices.
 
+**Active deployment pattern (2026-04-11 onwards):** The production
+broker runs as a Docker container on the services LXC, with its config
+managed by the `services-stack` Ansible role. The authoritative
+config file lives at
+`tools/ansible/roles/services-stack/files/mosquitto.conf` and is
+bind-mounted into the container. Do NOT edit the config here — it's
+no longer deployed. The manual-install instructions below are kept
+as reference for standalone Mosquitto deployments.
+
 ## Installation
 
 ```bash

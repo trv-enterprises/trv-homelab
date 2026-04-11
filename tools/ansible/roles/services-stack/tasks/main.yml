@@ -32,3 +32,13 @@
     mode: '0644'
   become: true
   register: compose_file
+
+- name: Deploy mosquitto.conf
+  ansible.builtin.copy:
+    src: mosquitto.conf
+    dest: "{{ services_deploy_dir }}/mosquitto.conf"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  become: true
+  register: mosquitto_config_file

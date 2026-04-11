@@ -3,12 +3,18 @@ services:
     image: eclipse-mosquitto:2
     restart: unless-stopped
     volumes:
-      - mosquitto_config:/mosquitto/config
+      # Config is bind-mounted from the deploy dir so it's the single
+      # source of truth (managed by the services-stack Ansible role).
+      # Using a named volume for /mosquitto/config previously hid the
+      # real config inside Docker and blocked updates to persistence
+      # and listener settings — see 2026-04-11 incident.
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     ports:
       - "1883:1883"
       - "9001:9001"
+      - "9883:9883"
 
   zigbee2mqtt:
     image: koenkk/zigbee2mqtt
@@ -58,7 +64,6 @@ services:
       - mosquitto
 
 volumes:
-  mosquitto_config:
   mosquitto_data:
   mosquitto_log:
   zigbee2mqtt_data:
