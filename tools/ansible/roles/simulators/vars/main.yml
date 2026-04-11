@@ -1,0 +1,35 @@
+---
+# Simulators deployment configuration
+
+# Deployment directory on remote host
+simulators_deploy_dir: /root/simulators
+
+# Simulator source (local path, synced to remote)
+# Default assumes trv-homelab and dashboard are sibling repos under the same parent
+simulators_source: "{{ playbook_dir }}/../../../../../dashboard/simulators"
+
+# GHCR image for ts-store
+tsstore_image: ghcr.io/trv-enterprises/ts-store:latest
+tsstore_port: 21080
+tsstore_internal_port: 21080
+
+# Data writer defaults
+data_writer_interval_ms: 1000
+data_writer_noise: "true"
+data_writer_anomaly_rate: "0.002"
+
+# Database seeder defaults
+db_num_sensors: 10
+db_days_back: 7
+db_interval_seconds: 60
+
+# WebSocket simulator defaults
+ws_interval_ms: 1000
+ws_num_sensors: 50
+ws_enable_noise: "true"
+ws_anomaly_rate: "0.002"
+ws_use_tsstore: "true"
+
+# REST API simulator defaults
+api_buffer_size: 1000
+api_generate_ms: 5000

@@ -1,0 +1,21 @@
+---
+# Simulators Deployment Playbook
+#
+# Deploys simulator services (ts-store, websocket, REST API, CSV server,
+# data-writer, postgres) to the simulators LXD container.
+#
+# Source code synced from: dashboard/simulators/
+# Secrets loaded from Ansible Vault (group_vars/all/vault.yml)
+#
+# Deploy:
+#   ansible-playbook playbooks/simulators-deploy.yml
+#
+# Override settings:
+#   ansible-playbook playbooks/simulators-deploy.yml -e "ws_num_sensors=100"
+
+- name: Deploy Simulators
+  hosts: simulators
+  become: false
+
+  roles:
+    - simulators

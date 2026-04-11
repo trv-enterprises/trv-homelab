@@ -1,0 +1,114 @@
+---
+# Simulators deployment tasks
+# Syncs simulator source from dashboard repo, deploys .env, builds and starts services
+
+- name: Validate simulator secrets
+  ansible.builtin.fail:
+    msg: "simulators_tsstore_admin_key and simulators_tsstore_api_key are required. Set in vault."
+  when: >
+    simulators_tsstore_admin_key is not defined or simulators_tsstore_admin_key == "" or
+    simulators_tsstore_api_key is not defined or simulators_tsstore_api_key == ""
+
+- name: Validate GHCR token
+  ansible.builtin.fail:
+    msg: "ghcr_token is required for pulling from GitHub Container Registry."
+  when: ghcr_token is not defined or ghcr_token == ""
+
+- name: Login to GitHub Container Registry
+  ansible.builtin.shell:
+    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u trv-enterprises --password-stdin
+  register: docker_login
+  changed_when: false
+  no_log: true
+
+- name: Create simulators deployment directory
+  ansible.builtin.file:
+    path: "{{ simulators_deploy_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Sync simulator source to remote
+  ansible.posix.synchronize:
+    src: "{{ simulators_source }}/"
+    dest: "{{ simulators_deploy_dir }}/"
+    delete: true
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=.claude"
+      - "--exclude=*.pyc"
+      - "--exclude=__pycache__"
+      - "--exclude=.DS_Store"
+      - "--exclude=._*"
+      - "--exclude=.env"
+      - "--exclude=.env.example"
+
+- name: Deploy simulators env file
+  ansible.builtin.template:
+    src: simulators.env.j2
+    dest: "{{ simulators_deploy_dir }}/.env"
+    mode: '0600'
+  register: env_file
+
+- name: Build Docker images
+  ansible.builtin.command:
+    cmd: docker compose build
+    chdir: "{{ simulators_deploy_dir }}"
+  register: build_result
+  changed_when: "'Building' in build_result.stdout or 'Building' in build_result.stderr"
+
+- name: Start services
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ simulators_deploy_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Wait for ts-store to be healthy
+  ansible.builtin.command:
+    cmd: docker inspect simulators-tsstore --format '{{ '{{' }}.State.Health.Status{{ '}}' }}'
+  register: health_check
+  until: health_check.stdout == "healthy"
+  retries: 15
+  delay: 2
+  changed_when: false
+
+- name: Check if sensor-readings store exists
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores"
+    method: GET
+    headers:
+      X-Admin-Key: "{{ simulators_tsstore_admin_key }}"
+    return_content: true
+  register: stores_response
+  ignore_errors: true
+
+- name: Create sensor-readings store if missing
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores"
+    method: POST
+    headers:
+      X-Admin-Key: "{{ simulators_tsstore_admin_key }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: sensor-readings
+      num_blocks: 200000
+      data_block_size: 512
+      index_block_size: 4096
+    status_code: [200, 201, 409]
+  when: stores_response is failed or stores_response.json.stores is not defined or 'sensor-readings' not in stores_response.json.stores
+
+- name: Show service status
+  ansible.builtin.command:
+    cmd: docker compose ps
+    chdir: "{{ simulators_deploy_dir }}"
+  register: status
+  changed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      Simulators deployed successfully!
+      Directory: {{ simulators_deploy_dir }}
+      Services:
+      {{ status.stdout }}
