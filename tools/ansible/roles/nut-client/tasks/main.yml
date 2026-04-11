@@ -9,13 +9,24 @@
     msg: "nut_monuser_password must be set in vault."
   when: nut_monuser_password is not defined or nut_monuser_password == ""
 
-- name: Install NUT client package
+- name: Install NUT client and sudo packages
   ansible.builtin.apt:
     name:
       - nut-client
+      - sudo
     state: present
     update_cache: true
     cache_valid_time: 3600
+  become: true
+
+- name: Grant nut user permission to run shutdown without password
+  ansible.builtin.template:
+    src: nut-sudoers.j2
+    dest: /etc/sudoers.d/nut-shutdown
+    owner: root
+    group: root
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
   become: true
 
 - name: Deploy nut.conf

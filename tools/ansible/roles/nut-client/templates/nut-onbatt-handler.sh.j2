@@ -18,11 +18,14 @@ log() {
 case "${NOTIFYTYPE:-}" in
     ONBATT)
         log "UPS on battery: scheduling shutdown in $SHUTDOWN_MINUTES minutes"
-        /sbin/shutdown -P +${SHUTDOWN_MINUTES} "NUT: UPS on battery, shutting down in ${SHUTDOWN_MINUTES} minutes" || true
+        # upsmon runs NOTIFYCMD as the non-privileged 'nut' user. We need
+        # root to talk to systemd-logind, so invoke shutdown via sudo.
+        # Sudoers grant is deployed by the nut-client role.
+        sudo -n /sbin/shutdown -P +${SHUTDOWN_MINUTES} "NUT: UPS on battery, shutting down in ${SHUTDOWN_MINUTES} minutes" 2>&1 | logger -t "$LOG_TAG" || log "sudo shutdown failed"
         ;;
     ONLINE)
         log "UPS back on line power: cancelling pending shutdown"
-        /sbin/shutdown -c "NUT: line power restored" || true
+        sudo -n /sbin/shutdown -c "NUT: line power restored" 2>&1 | logger -t "$LOG_TAG" || log "sudo shutdown -c failed"
         ;;
     LOWBATT)
         log "UPS low battery: immediate shutdown handled by upsmon SHUTDOWNCMD"

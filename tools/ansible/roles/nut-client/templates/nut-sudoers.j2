@@ -1,0 +1,5 @@
+# Managed by Ansible - do not edit manually
+# Allow the nut user to schedule and cancel shutdowns without a password.
+# This is required because upsmon runs NOTIFYCMD as the non-privileged
+# nut user, but systemd-logind requires root to schedule a shutdown.
+nut ALL=(root) NOPASSWD: /sbin/shutdown, /usr/sbin/shutdown
