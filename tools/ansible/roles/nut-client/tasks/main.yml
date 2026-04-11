@@ -1,0 +1,83 @@
+---
+# NUT client deployment tasks
+# Configures this host as a NUT secondary that watches a remote upsd
+# (typically on the host with the UPS USB connection) and shuts down
+# when the primary reports a low-battery or prolonged on-battery event.
+
+- name: Validate NUT password is set
+  ansible.builtin.fail:
+    msg: "nut_monuser_password must be set in vault."
+  when: nut_monuser_password is not defined or nut_monuser_password == ""
+
+- name: Install NUT client package
+  ansible.builtin.apt:
+    name:
+      - nut-client
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Deploy nut.conf
+  ansible.builtin.template:
+    src: nut.conf.j2
+    dest: /etc/nut/nut.conf
+    owner: root
+    group: nut
+    mode: '0640'
+  become: true
+  notify: Restart nut-monitor
+
+- name: Deploy upsmon.conf
+  ansible.builtin.template:
+    src: upsmon.conf.j2
+    dest: /etc/nut/upsmon.conf
+    owner: root
+    group: nut
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart nut-monitor
+
+- name: Deploy ONBATT handler script
+  ansible.builtin.template:
+    src: nut-onbatt-handler.sh.j2
+    dest: /etc/nut/nut-onbatt-handler.sh
+    owner: root
+    group: nut
+    mode: '0750'
+  become: true
+
+- name: Ensure /run/nut exists
+  ansible.builtin.file:
+    path: /run/nut
+    state: directory
+    owner: nut
+    group: nut
+    mode: '0770'
+  become: true
+
+- name: Enable and start nut-monitor
+  ansible.builtin.systemd:
+    name: nut-monitor
+    enabled: true
+    state: started
+  become: true
+
+- name: Flush handlers to apply config before verification
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify UPS is reachable from this client
+  ansible.builtin.command:
+    cmd: upsc {{ nut_ups_name }}@{{ nut_primary_address }}:{{ nut_primary_port }}
+  register: upsc_output
+  changed_when: false
+  failed_when: upsc_output.rc != 0
+
+- name: Display UPS status
+  ansible.builtin.debug:
+    msg: |
+      NUT client deployed successfully on {{ inventory_hostname }}
+      Watching: {{ nut_ups_name }}@{{ nut_primary_address }}:{{ nut_primary_port }}
+      UPS status:
+      {{ upsc_output.stdout }}

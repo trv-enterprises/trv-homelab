@@ -1,0 +1,27 @@
+# Managed by Ansible - do not edit manually
+# upsmon configuration for a NUT secondary (netclient)
+
+# Monitor the remote UPS as secondary
+# Fields: <ups@host:port> <powervalue> <user> <password> <primary|secondary>
+MONITOR {{ nut_ups_name }}@{{ nut_primary_address }}:{{ nut_primary_port }} 1 {{ nut_monuser }} {{ nut_monuser_password }} secondary
+
+MINSUPPLIES 1
+
+# Immediate shutdown command for the local host.
+# Triggered by upsmon when LB (low battery) is raised by the primary.
+SHUTDOWNCMD "/sbin/shutdown -h +0 'NUT: UPS low battery, shutting down cleanly'"
+
+POLLFREQ {{ nut_upsmon_pollfreq }}
+POLLFREQALERT {{ nut_upsmon_pollfreqalert }}
+
+DEADTIME 15
+
+POWERDOWNFLAG /run/nut/killpower
+
+FINALDELAY 5
+
+# Time-on-battery trigger is handled by the onbatt handler script
+NOTIFYCMD /etc/nut/nut-onbatt-handler.sh
+NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC
+NOTIFYFLAG ONLINE SYSLOG+WALL+EXEC
+NOTIFYFLAG LOWBATT SYSLOG+WALL

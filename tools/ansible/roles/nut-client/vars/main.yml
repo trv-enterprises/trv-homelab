@@ -1,0 +1,23 @@
+---
+# NUT client configuration (for hosts that watch a remote NUT server)
+
+# Name and address of the UPS to monitor (must match what the server publishes)
+nut_ups_name: ups
+
+# Network address of the NUT primary/server.
+# Override in inventory/host_vars or pass via -e.
+# Example: nut_primary_address: 192.168.1.12
+nut_primary_address: "{{ nut_server_lan_ip | default('192.168.1.12') }}"
+nut_primary_port: 3493
+
+# Monitor user on the NUT primary.
+# Default matches Synology DSM, override in vault if needed.
+# (Role reads nut_monuser from vault/group_vars; this is only the fallback.)
+
+# Shutdown thresholds - must match the server's thresholds
+nut_shutdown_ontime_seconds: 300   # 5 minutes
+nut_shutdown_battery_percent: 50
+
+# upsmon loop interval
+nut_upsmon_pollfreq: 5
+nut_upsmon_pollfreqalert: 5

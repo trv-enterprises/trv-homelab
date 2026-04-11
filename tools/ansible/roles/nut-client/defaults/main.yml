@@ -1,0 +1,7 @@
+---
+# Default NUT client values - overridable via inventory, group_vars, host_vars, or vault
+
+# Default monitor user name on the NUT primary.
+# Synology DSM uses "monuser" by default. Override in vault if the
+# primary uses a different account name.
+nut_monuser: monuser

@@ -1,0 +1,20 @@
+---
+# NUT Client Deployment Playbook
+#
+# Deploys NUT client on hosts that should shut down when the UPS goes
+# critical. Each client runs upsmon in secondary mode, watching the
+# NUT primary over the LAN.
+#
+# Secrets loaded from Ansible Vault (nut_monuser_password).
+#
+# Deploy:
+#   ansible-playbook playbooks/nut-client-deploy.yml
+#
+# The target group is `ups_clients`.
+
+- name: Deploy NUT Clients
+  hosts: ups_clients
+  become: true
+
+  roles:
+    - nut-client
