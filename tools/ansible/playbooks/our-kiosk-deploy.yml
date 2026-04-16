@@ -139,6 +139,38 @@
           For systemd services, run with -K flag and use the setup-systemd tag:
             ansible-playbook playbooks/our-kiosk-deploy.yml -K --tags setup-systemd
 
+# Restart services and clean-boot Chromium so a fresh display bundle
+# and Python changes take effect without a manual reboot. Mirrors the
+# cache-clear play in dashboard-deploy.yml.
+- name: Restart kiosk services and clear browser cache
+  hosts: "{{ kiosk_target | default('trv-kiosk-001') }}"
+  gather_facts: false
+  become: false
+
+  vars:
+    ansible_user: root
+
+  tasks:
+    - name: Restart voice pipeline (picks up Python + config changes)
+      ansible.builtin.raw: systemctl restart voice-display-voice
+      failed_when: false
+
+    - name: Restart display HTTP server (serves new dist bundle)
+      ansible.builtin.raw: systemctl restart voice-display-ui
+      failed_when: false
+
+    - name: Stop kiosk display
+      ansible.builtin.raw: systemctl stop kiosk-display
+      failed_when: false
+
+    - name: Clear Chromium snap cache and kiosk disk cache
+      ansible.builtin.raw: rm -rf /home/tviviano/snap/chromium/common/chromium/Default /tmp/chromium
+      failed_when: false
+
+    - name: Start kiosk display
+      ansible.builtin.raw: systemctl start kiosk-display
+      failed_when: false
+
 # Optional: Set up systemd services (requires sudo password with -K)
 - name: Setup systemd services
   hosts: "{{ kiosk_target | default('trv-kiosk-001') }}"
