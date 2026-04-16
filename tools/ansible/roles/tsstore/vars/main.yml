@@ -1,7 +1,7 @@
 ---
 # tsstore role variables
 
-tsstore_version: "0.4.0"
+tsstore_version: "0.5.3"
 tsstore_user: <user>
 tsstore_group: <user>
 
@@ -25,3 +25,17 @@ tsstore_collectors: []
 
 # Local path to built binaries (ts-store repo is sibling to trv-homelab)
 tsstore_local_bin_path: /path/to/ts-store/bin
+
+# MQTT streams (override per host in inventory)
+tsstore_mqtt_streams: []
+# Example:
+# tsstore_mqtt_streams:
+#   - store: system-stats
+#     broker_url: "tcp://broker:1883"
+#     topic: "hostname/system-stats"
+#     from: now
+#     include_timestamp: true
+#     cursor_interval: 60
+
+# Per-store API keys (set in vault, keyed by store name)
+tsstore_store_api_keys: {}

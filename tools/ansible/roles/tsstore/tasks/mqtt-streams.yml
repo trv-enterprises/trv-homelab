@@ -1,0 +1,32 @@
+---
+# Configure MQTT stream connections for tsstore
+# Uses the tsstore CLI to create persistent MQTT sink connections.
+# Connections survive restarts via mqtt_connections.json in the store directory.
+
+- name: Check existing MQTT connections
+  ansible.builtin.command:
+    cmd: >
+      curl -s -H "X-API-Key: {{ tsstore_store_api_keys[item.store] }}"
+      http://localhost:{{ tsstore_port }}/api/stores/{{ item.store }}/mqtt/connections
+  loop: "{{ tsstore_mqtt_streams }}"
+  register: mqtt_existing
+  changed_when: false
+  failed_when: false
+
+- name: Create MQTT stream connections
+  ansible.builtin.command:
+    cmd: >
+      {{ tsstore_bin_dir }}/tsstore stream mqtt {{ item.item.store }}
+      --broker {{ item.item.broker_url }}
+      --topic {{ item.item.topic }}
+      --api-key {{ tsstore_store_api_keys[item.item.store] }}
+      --from {{ item.item.from | default('now') }}
+      {{ '--include-timestamp' if item.item.include_timestamp | default(false) else '' }}
+      {{ '--cursor-interval ' ~ item.item.cursor_interval if item.item.cursor_interval is defined else '' }}
+  environment:
+    TSSTORE_PORT: "{{ tsstore_port }}"
+  loop: "{{ mqtt_existing.results }}"
+  when: >
+    item.stdout is defined and
+    (item.stdout | from_json).connections | default([]) | length == 0
+  changed_when: true

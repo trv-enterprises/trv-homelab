@@ -13,6 +13,12 @@ tsstore_image: ghcr.io/trv-enterprises/ts-store:latest
 tsstore_port: 21080
 tsstore_internal_port: 21080
 
+# ts-store location stores (data-writer writes to all of these)
+simulators_tsstore_stores:
+  - warehouse
+  - server-room
+  - manufacturing
+
 # Data writer defaults
 data_writer_interval_ms: 1000
 data_writer_noise: "true"
@@ -28,7 +34,6 @@ ws_interval_ms: 1000
 ws_num_sensors: 50
 ws_enable_noise: "true"
 ws_anomaly_rate: "0.002"
-ws_use_tsstore: "true"
 
 # REST API simulator defaults
 api_buffer_size: 1000

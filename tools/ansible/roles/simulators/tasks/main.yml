@@ -72,7 +72,13 @@
   delay: 2
   changed_when: false
 
-- name: Check if sensor-readings store exists
+- name: Fix ts-store data volume ownership
+  ansible.builtin.command:
+    cmd: docker exec -u root simulators-tsstore chown tsstore:tsstore /data
+  changed_when: false
+  failed_when: false
+
+- name: Get existing stores
   ansible.builtin.uri:
     url: "http://localhost:{{ tsstore_port }}/api/stores"
     method: GET
@@ -82,7 +88,7 @@
   register: stores_response
   ignore_errors: true
 
-- name: Create sensor-readings store if missing
+- name: Create location stores
   ansible.builtin.uri:
     url: "http://localhost:{{ tsstore_port }}/api/stores"
     method: POST
@@ -91,12 +97,69 @@
       Content-Type: application/json
     body_format: json
     body:
-      name: sensor-readings
+      name: "{{ item }}"
       num_blocks: 200000
       data_block_size: 512
       index_block_size: 4096
     status_code: [200, 201, 409]
-  when: stores_response is failed or stores_response.json.stores is not defined or 'sensor-readings' not in stores_response.json.stores
+  loop: "{{ simulators_tsstore_stores }}"
+  when: stores_response is failed or stores_response.json.stores is not defined or item not in stores_response.json.stores
+  register: store_creation
+
+- name: Compute API key hash
+  ansible.builtin.command:
+    cmd: printf '%s' '{{ simulators_tsstore_api_key }}' | sha256sum | awk '{print $1}'
+  register: api_key_hash
+  changed_when: false
+  delegate_to: localhost
+
+- name: Write shared API key to new stores
+  ansible.builtin.copy:
+    dest: /tmp/tsstore-keys-{{ item.item }}.json
+    content: |
+      {
+        "store_name": "{{ item.item }}",
+        "keys": [
+          {
+            "id": "{{ simulators_tsstore_api_key[8:16] }}",
+            "hash": "{{ api_key_hash.stdout }}",
+            "created_at": "{{ ansible_date_time.iso8601 }}",
+            "note": "Shared key via Ansible deploy"
+          }
+        ]
+      }
+    mode: '0600'
+  loop: "{{ store_creation.results }}"
+  when: item.changed | default(false)
+
+- name: Copy key files into ts-store container
+  ansible.builtin.command:
+    cmd: docker cp /tmp/tsstore-keys-{{ item.item }}.json simulators-tsstore:/data/{{ item.item }}/keys.json
+  loop: "{{ store_creation.results }}"
+  when: item.changed | default(false)
+
+- name: Clean up temporary key files
+  ansible.builtin.file:
+    path: /tmp/tsstore-keys-{{ item.item }}.json
+    state: absent
+  loop: "{{ store_creation.results }}"
+  when: item.changed | default(false)
+
+- name: Restart ts-store to reload keys
+  ansible.builtin.command:
+    cmd: docker compose restart tsstore
+    chdir: "{{ simulators_deploy_dir }}"
+  when: store_creation.changed
+
+- name: Wait for ts-store to be healthy after key reload
+  ansible.builtin.command:
+    cmd: docker inspect simulators-tsstore --format '{{ '{{' }}.State.Health.Status{{ '}}' }}'
+  register: health_recheck
+  until: health_recheck.stdout == "healthy"
+  retries: 15
+  delay: 2
+  changed_when: false
+  when: store_creation.changed
 
 - name: Show service status
   ansible.builtin.command:

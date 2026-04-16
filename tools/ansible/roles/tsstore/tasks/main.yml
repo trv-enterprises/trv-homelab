@@ -97,3 +97,7 @@
 - name: Deploy collectors
   ansible.builtin.include_tasks: collectors.yml
   when: tsstore_collectors | length > 0
+
+- name: Configure MQTT streams
+  ansible.builtin.include_tasks: mqtt-streams.yml
+  when: tsstore_mqtt_streams | default([]) | length > 0
