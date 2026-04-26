@@ -154,13 +154,16 @@
           # restores the previous session state from snap profile data
           # instead of fetching fresh content.
           #
-          # --remote-debugging-port + --remote-debugging-address: expose
-          # Chromium DevTools on port 9222, bound to all interfaces so a
-          # remote machine on the tailnet can attach. Open
-          # http://<kiosk-tailscale-ip>:9222 from your laptop, click the
-          # tab, and you get full DevTools (console, network, etc.).
-          # Safe on a private tailnet only — anyone who can reach the
-          # port can inspect/manipulate the kiosk session.
+          # --remote-debugging-port: expose Chromium DevTools on port
+          # 9222 for remote attach. Chromium M127+ refuses to bind the
+          # debug port to anything but localhost regardless of
+          # --remote-debugging-address, so attach via SSH local-forward
+          # from your laptop:
+          #   ssh -N -L 9222:localhost:9222 tviviano@<kiosk-tailscale-ip>
+          #   then open http://localhost:9222/ in Chrome/Brave/Edge.
+          # The `make kiosk-devtools` target in homelab-deploy wraps
+          # this. Auth + transport are inherited from SSH; nothing
+          # additional is exposed on the tailnet.
           exec chromium-browser \
               --kiosk \
               --incognito \
@@ -177,7 +180,6 @@
               --disable-features=TranslateUI,BackForwardCache \
               --disk-cache-dir=/tmp/chromium \
               --remote-debugging-port=9222 \
-              --remote-debugging-address=0.0.0.0 \
               http://localhost:5174
         dest: "/home/{{ kiosk_user }}/.xinitrc"
         owner: "{{ kiosk_user }}"
