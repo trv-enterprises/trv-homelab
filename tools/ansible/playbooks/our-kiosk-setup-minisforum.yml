@@ -185,6 +185,28 @@
         mode: "0755"
       tags: x11
 
+    # ── EMEET self-heal udev rule ────────────
+    # The voice pipeline depends on the EMEET USB mic. After a power-fail
+    # reboot the device sometimes doesn't enumerate before systemd's
+    # StartLimitBurst (5) is exhausted, leaving voice-display-voice
+    # permanently failed until manual intervention. This rule fires when
+    # the EMEET sound card appears (boot or hot-plug) and clears any
+    # failed state + (re)starts the service. Idempotent on the happy
+    # path: reset-failed is a no-op when not failed, start is a no-op
+    # when already running. --no-block prevents udev from blocking on
+    # the systemctl call.
+    - name: Install EMEET self-heal udev rule
+      ansible.builtin.copy:
+        content: |
+          # Restart voice pipeline when the EMEET USB mic appears.
+          # See playbook task "Install EMEET self-heal udev rule" for
+          # rationale.
+          ACTION=="add", SUBSYSTEM=="sound", KERNEL=="card[0-9]*", ATTRS{idVendor}=="328f", ATTRS{idProduct}=="007d", RUN+="/bin/systemctl --no-block reset-failed voice-display-voice.service", RUN+="/bin/systemctl --no-block start voice-display-voice.service"
+        dest: /etc/udev/rules.d/99-emeet-voice-restart.rules
+        mode: "0644"
+      notify: Reload udev
+      tags: udev
+
     # ── Deployment directory ──────────────────
     - name: Create deployment directory
       ansible.builtin.file:
@@ -240,3 +262,11 @@
     - name: Reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
+
+    - name: Reload udev
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+      loop:
+        - udevadm control --reload
+        - udevadm trigger --subsystem-match=sound --action=add
+      changed_when: false
