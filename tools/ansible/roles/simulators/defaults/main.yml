@@ -1,0 +1,34 @@
+---
+# Simulator defaults — overrideable in inventory/host_vars/<host>.yml.
+# (Role-internal constants live in vars/main.yml.)
+
+# ts-store image version. Pin to a release so deploys are reproducible;
+# bump intentionally when upgrading. Note: GHCR Docker tags strip the
+# leading 'v' from the GitHub release tag (release v0.6.1 publishes
+# image tag 0.6.1).
+tsstore_version: "0.6.1"
+tsstore_image: "ghcr.io/trv-enterprises/ts-store:{{ tsstore_version }}"
+
+# Local source path (synced to remote). Assumes trv-homelab and
+# dashboard are sibling repos under the same parent.
+simulators_source: "{{ playbook_dir }}/../../../../../dashboard/simulators"
+
+# Data-writer behavior — adjust per environment as needed.
+data_writer_interval_ms: 1000
+data_writer_noise: "true"
+data_writer_anomaly_rate: "0.002"
+
+# Database seeder behavior.
+db_num_sensors: 10
+db_days_back: 7
+db_interval_seconds: 60
+
+# WebSocket simulator behavior.
+ws_interval_ms: 1000
+ws_num_sensors: 50
+ws_enable_noise: "true"
+ws_anomaly_rate: "0.002"
+
+# REST API simulator behavior.
+api_buffer_size: 1000
+api_generate_ms: 5000

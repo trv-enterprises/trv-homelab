@@ -56,6 +56,16 @@
   register: build_result
   changed_when: "'Building' in build_result.stdout or 'Building' in build_result.stderr"
 
+# Pull the ts-store image explicitly. Without this, `up -d` only pulls
+# when the image is missing locally — so version bumps in defaults
+# (e.g. v0.6.1 -> v0.6.2) would silently keep running the old image.
+- name: Pull ts-store image
+  ansible.builtin.command:
+    cmd: docker compose pull tsstore
+    chdir: "{{ simulators_deploy_dir }}"
+  register: pull_result
+  changed_when: "'Pulled' in pull_result.stderr or 'Downloaded' in pull_result.stderr"
+
 - name: Start services
   ansible.builtin.command:
     cmd: docker compose up -d
