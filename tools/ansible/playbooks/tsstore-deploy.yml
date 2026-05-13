@@ -1,51 +1,27 @@
 ---
 # tsstore Deployment Playbook
 #
-# Deploy tsstore and collectors to target hosts
+# Deploys the ts-store time-series store + Go collectors from GitHub
+# release assets. System-systemd install. Hosts must have NOPASSWD
+# sudo for the SSH user (Pi/srv hosts already do).
 #
 # Usage:
-#   ansible-playbook playbooks/tsstore-deploy.yml --limit trv-srv-001 -K
-#   ansible-playbook playbooks/tsstore-deploy.yml --limit pis -K
+#   ansible-playbook playbooks/tsstore-deploy.yml --limit trv-srv-001
+#   ansible-playbook playbooks/tsstore-deploy.yml --limit pis
 #
-# Prerequisites:
-#   Build binaries first: cd ../../../ts-store && make build
+# Override the release version:
+#   ansible-playbook playbooks/tsstore-deploy.yml --limit trv-srv-001 \
+#     -e "tsstore_version=v0.6.2"
 #
-# Note: -K (--ask-become-pass) prompts for sudo password
+# Required vars per host (from inventory/host_vars/<host>.yml):
+#   - tsstore_admin_key
+#   - tsstore_store_api_keys (one per store the host writes to)
+#   - tsstore_collectors (list of Go collectors to deploy)
+#   - tsstore_mqtt_streams (optional push connections)
 
 - name: Deploy tsstore
-  hosts: all
+  hosts: tsstore
   become: false
-
-  vars:
-    # ts-store repo is a sibling to trv-homelab
-    tsstore_local_bin_path: /path/to/ts-store/bin
-
-  pre_tasks:
-    - name: Check that tsstore binary exists locally
-      ansible.builtin.stat:
-        path: /path/to/ts-store/bin/tsstore-linux-amd64
-      delegate_to: localhost
-      register: tsstore_binary
-      run_once: true
-
-    - name: Fail if binary not built
-      ansible.builtin.fail:
-        msg: "tsstore binary not found. Run 'make build' in ts-store directory first."
-      when: not tsstore_binary.stat.exists
-      run_once: true
-
-    - name: Stop existing tsstore service if running
-      ansible.builtin.systemd:
-        name: tsstore
-        state: stopped
-      become: true
-      failed_when: false
-
-    - name: Kill any orphan tsstore processes
-      ansible.builtin.shell: pgrep -f '/usr/local/bin/tsstore serve' | xargs -r kill || true
-      become: true
-      changed_when: false
-      failed_when: false
 
   roles:
     - tsstore

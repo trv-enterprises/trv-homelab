@@ -1,0 +1,29 @@
+---
+# Defaults — overrideable in inventory/host_vars/<host>.yml.
+# (Role-internal constants live in vars/main.yml, which has higher
+# precedence than host_vars and is therefore unsuitable for things
+# the operator is expected to set per host.)
+
+# Release version. Must match a tag in trv-enterprises/ts-store with
+# release assets named <binary>-<version>-linux-<arch>.
+tsstore_version: "v0.6.1"
+
+# Collectors to enable (override per host).
+# Only Go collectors shipped in the ts-store release are supported here.
+# Currently: system-stats, journal-logs. (sensehat is a separate Python
+# service in the utilities repo — not deployed by this role.)
+tsstore_collectors: []
+# Example:
+# tsstore_collectors:
+#   - name: system-stats
+#     interval: 20
+#   - name: journal-logs
+
+# MQTT push streams (override per host).
+# Rendered into mqtt_connections.json inside each store's data dir.
+tsstore_mqtt_streams: []
+
+# Per-store API keys, keyed by hyphenated store name.
+# Values are typically vault references like "{{ pi001_system_stats_api_key }}".
+# The role preserves these across re-deploys via SHA-256 of the key in keys.json.
+tsstore_store_api_keys: {}

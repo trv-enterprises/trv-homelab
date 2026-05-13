@@ -33,6 +33,11 @@ services:
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
       - DASHBOARD_LLM_API_KEY={{ anthropic_api_key }}
+      # Address ts-store dials back to for push-mode streaming callbacks.
+      - DASHBOARD_HOST={{ lan_ip | default(ansible_host) }}:3001
+      # Server-wide gate that lets per-connection insecure_skip_verify take effect.
+      # Required for api.rest connections to self-signed endpoints (e.g. Proxmox).
+      - DASHBOARD_API_ALLOW_INSECURE_TLS={{ dashboard_api_allow_insecure_tls | default('false') }}
     depends_on:
       mongodb:
         condition: service_healthy

@@ -1,32 +1,54 @@
 ---
-# Configure MQTT stream connections for tsstore
-# Uses the tsstore CLI to create persistent MQTT sink connections.
-# Connections survive restarts via mqtt_connections.json in the store directory.
+# Render mqtt_connections.json for each store that has MQTT push streams.
+#
+# ts-store reads this file at startup (internal/mqtt/manager.go:LoadAndStart)
+# and re-establishes the push connections. Writing it directly is more
+# robust than calling the running ts-store's HTTP API:
+#   - no auth coordination at deploy time
+#   - idempotent across re-runs
+#   - survives ts-store restart by design
+#
+# Stable connection IDs are derived from store+broker+topic so re-runs
+# don't churn cursor files. ts-store uses these IDs to name cursor files
+# (mqtt_<id>.cursor) inside the store dir.
 
-- name: Check existing MQTT connections
-  ansible.builtin.command:
-    cmd: >
-      curl -s -H "X-API-Key: {{ tsstore_store_api_keys[item.store] }}"
-      http://localhost:{{ tsstore_port }}/api/stores/{{ item.store }}/mqtt/connections
-  loop: "{{ tsstore_mqtt_streams }}"
-  register: mqtt_existing
-  changed_when: false
-  failed_when: false
+- name: Group MQTT streams by store
+  ansible.builtin.set_fact:
+    tsstore_mqtt_by_store: >-
+      {{
+        tsstore_mqtt_streams | groupby('store') | items2dict(key_name=0, value_name=1)
+      }}
 
-- name: Create MQTT stream connections
-  ansible.builtin.command:
-    cmd: >
-      {{ tsstore_bin_dir }}/tsstore stream mqtt {{ item.item.store }}
-      --broker {{ item.item.broker_url }}
-      --topic {{ item.item.topic }}
-      --api-key {{ tsstore_store_api_keys[item.item.store] }}
-      --from {{ item.item.from | default('now') }}
-      {{ '--include-timestamp' if item.item.include_timestamp | default(false) else '' }}
-      {{ '--cursor-interval ' ~ item.item.cursor_interval if item.item.cursor_interval is defined else '' }}
-  environment:
-    TSSTORE_PORT: "{{ tsstore_port }}"
-  loop: "{{ mqtt_existing.results }}"
-  when: >
-    item.stdout is defined and
-    (item.stdout | from_json).connections | default([]) | length == 0
-  changed_when: true
+- name: Render mqtt_connections.json per store
+  ansible.builtin.copy:
+    content: |
+      {
+        "connections": [
+      {% for stream in item.value %}
+          {
+            "id": "{{ (item.key ~ stream.broker_url ~ stream.topic) | hash('sha256') | truncate(8, true, '') }}",
+            "broker_url": "{{ stream.broker_url }}",
+            "topic": "{{ stream.topic }}",
+            {% if stream.client_id is defined %}"client_id": "{{ stream.client_id }}",
+            {% endif %}{% if stream.username is defined %}"username": "{{ stream.username }}",
+            {% endif %}{% if stream.password is defined %}"password": "{{ stream.password }}",
+            {% endif %}"from": {{ -1 if (stream.from | default('now')) == 'now' else (0 if stream.from == 'oldest' else stream.from) }},
+            "include_timestamp": {{ stream.include_timestamp | default(false) | to_json }},
+            "cursor_persist_interval": {{ stream.cursor_interval | default(0) }}{% if stream.agg_window is defined %},
+            "agg_window": "{{ stream.agg_window }}"{% endif %}{% if stream.agg_fields is defined %},
+            "agg_fields": "{{ stream.agg_fields }}"{% endif %}{% if stream.agg_default is defined %},
+            "agg_default": "{{ stream.agg_default }}"{% endif %},
+            "created_at": "{{ ansible_date_time.iso8601 }}"
+          }{{ "," if not loop.last else "" }}
+      {% endfor %}
+        ]
+      }
+    dest: "{{ tsstore_data_dir }}/{{ item.key }}/mqtt_connections.json"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  loop: "{{ tsstore_mqtt_by_store | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  notify: Restart tsstore

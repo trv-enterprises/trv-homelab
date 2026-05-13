@@ -1,15 +1,45 @@
 ---
 # tsstore deployment tasks
+#
+# Sequence:
+#   1. Validate inputs (admin key set, collector names recognized)
+#   2. Detect architecture
+#   3. Create user + directories
+#   4. Download tsstore binary from GitHub release
+#   5. Write tsstore env file (admin key)
+#   6. Install systemd unit + tmpfiles config
+#   7. Start tsstore
+#   8. Pre-create per-store data dirs with keys.json (key preservation)
+#   9. Render mqtt_connections.json into per-store dirs
+#  10. Deploy collectors (binary download + systemd unit + start)
 
-- name: Determine architecture
+- name: Validate tsstore_admin_key is set
+  ansible.builtin.fail:
+    msg: >-
+      tsstore_admin_key is required. Set <host>_tsstore_admin_key in
+      inventory/group_vars/all/vault.yml and reference it from host_vars.
+  when: tsstore_admin_key is not defined or (tsstore_admin_key | length) == 0
+
+- name: Validate all collector names are recognized
+  ansible.builtin.fail:
+    msg: >-
+      Collector '{{ item.name }}' is not a known Go collector. Known:
+      {{ tsstore_known_collectors | join(', ') }}. To add a new
+      collector, ship its binary in the ts-store release and add the
+      name to tsstore_known_collectors.
+  loop: "{{ tsstore_collectors }}"
+  when: item.name not in tsstore_known_collectors
+
+- name: Determine architecture suffix
   ansible.builtin.set_fact:
-    tsstore_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+    tsstore_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
 
-- name: Create tsstore user
+- name: Create tsstore service user
   ansible.builtin.user:
     name: "{{ tsstore_user }}"
-    system: false
-    create_home: true
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
   become: true
 
 - name: Create directories
@@ -25,13 +55,14 @@
     - "{{ tsstore_config_dir }}"
   become: true
 
-- name: Copy tsstore binary
-  ansible.builtin.copy:
-    src: "{{ tsstore_local_bin_path }}/tsstore-linux-{{ tsstore_arch }}"
+- name: Download tsstore binary
+  ansible.builtin.get_url:
+    url: "{{ tsstore_release_url_base }}/{{ tsstore_version }}/tsstore-{{ tsstore_version }}-linux-{{ tsstore_arch }}"
     dest: "{{ tsstore_bin_dir }}/tsstore"
     owner: root
     group: root
     mode: '0755'
+    force: true
   become: true
   notify: Restart tsstore
 
@@ -47,6 +78,7 @@
     group: "{{ tsstore_group }}"
     mode: '0640'
   become: true
+  no_log: true
   notify: Restart tsstore
 
 - name: Create tsstore systemd service
@@ -89,15 +121,119 @@
   ansible.builtin.uri:
     url: "http://localhost:{{ tsstore_port }}/health"
     status_code: 200
-  register: result
-  until: result.status == 200
-  retries: 10
+  register: tsstore_health
+  until: tsstore_health.status == 200
+  retries: 15
   delay: 2
+
+# Per-store API key preservation. Mirror the simulators role pattern:
+# the running ts-store auto-creates a store on first write, but we
+# pre-create the directory and seed keys.json so the collector can
+# authenticate from the moment it starts.
+- name: Pre-create per-store data directories
+  ansible.builtin.file:
+    path: "{{ tsstore_data_dir }}/{{ item.key }}"
+    state: directory
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0755'
+  loop: "{{ tsstore_store_api_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  no_log: true
+
+# Migration safety: a store directory that pre-existed from a manual
+# install may have files owned by the original install user (e.g.
+# tviviano). The tsstore daemon, running as the dedicated service
+# user, must be able to read AND write every file inside. Recursive
+# chown ensures that. Idempotent — no-op when ownership is already
+# correct.
+- name: Ensure store dir contents are owned by service user
+  ansible.builtin.file:
+    path: "{{ tsstore_data_dir }}/{{ item.key }}"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    recurse: true
+  loop: "{{ tsstore_store_api_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  no_log: true
+  notify: Restart tsstore
+
+- name: Compute SHA-256 of each store API key
+  ansible.builtin.set_fact:
+    tsstore_key_hashes: >-
+      {{
+        tsstore_key_hashes | default({}) | combine({
+          item.key: item.value | hash('sha256')
+        })
+      }}
+  loop: "{{ tsstore_store_api_keys | dict2items }}"
+  no_log: true
+
+- name: Read existing keys.json (if any) to decide what changes
+  ansible.builtin.slurp:
+    src: "{{ tsstore_data_dir }}/{{ item.key }}/keys.json"
+  loop: "{{ tsstore_store_api_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: tsstore_existing_keys
+  become: true
+  failed_when: false
+  changed_when: false
+  no_log: true
+
+- name: Write keys.json for stores whose hash differs
+  ansible.builtin.copy:
+    content: |
+      {
+        "store_name": "{{ item.item.key }}",
+        "keys": [
+          {
+            "id": "{{ item.item.value[8:16] }}",
+            "hash": "{{ tsstore_key_hashes[item.item.key] }}",
+            "created_at": "{{ ansible_date_time.iso8601 }}",
+            "note": "Managed by Ansible tsstore role"
+          }
+        ]
+      }
+    dest: "{{ tsstore_data_dir }}/{{ item.item.key }}/keys.json"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  loop: "{{ tsstore_existing_keys.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: >
+    item.content is not defined or
+    (item.content | b64decode | from_json)['keys'][0].hash != tsstore_key_hashes[item.item.key]
+  become: true
+  no_log: true
+  notify: Restart tsstore
+
+# Even when hash matches and the file isn't rewritten, ensure ownership
+# is correct. Pre-existing keys.json from a tviviano-run install will
+# be unreadable by the tsstore service user otherwise.
+- name: Ensure keys.json ownership/permissions
+  ansible.builtin.file:
+    path: "{{ tsstore_data_dir }}/{{ item.key }}/keys.json"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+    state: file
+  loop: "{{ tsstore_store_api_keys | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  no_log: true
+  notify: Restart tsstore
+
+- name: Render MQTT stream configurations
+  ansible.builtin.include_tasks: mqtt-streams.yml
+  when: tsstore_mqtt_streams | length > 0
 
 - name: Deploy collectors
   ansible.builtin.include_tasks: collectors.yml
   when: tsstore_collectors | length > 0
-
-- name: Configure MQTT streams
-  ansible.builtin.include_tasks: mqtt-streams.yml
-  when: tsstore_mqtt_streams | default([]) | length > 0

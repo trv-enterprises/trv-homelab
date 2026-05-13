@@ -1,17 +1,54 @@
 ---
-# Deploy tsstore collectors
+# Deploy Go collectors shipped in the ts-store release.
+#
+# Each collector in tsstore_collectors must have its name in
+# tsstore_known_collectors (validated in main.yml) and its API key
+# must be present in tsstore_store_api_keys.
 
-- name: Copy collector binaries
-  ansible.builtin.copy:
-    src: "{{ tsstore_local_bin_path }}/{{ item.name }}-linux-{{ tsstore_arch }}"
+- name: Validate collector has an API key configured
+  ansible.builtin.fail:
+    msg: >-
+      Collector '{{ item.name }}' has no entry in tsstore_store_api_keys.
+      The collector cannot write to its store without an API key.
+  loop: "{{ tsstore_collectors }}"
+  when: item.name not in tsstore_store_api_keys
+
+# journal-logs needs to read the systemd journal as the service user.
+# Adding the service user to systemd-journal grants that without giving
+# any other capabilities.
+- name: Add service user to systemd-journal group (for journal-logs collector)
+  ansible.builtin.user:
+    name: "{{ tsstore_user }}"
+    groups: systemd-journal
+    append: true
+  become: true
+  when: tsstore_collectors | selectattr('name', 'equalto', 'journal-logs') | list | length > 0
+  notify: "Restart journal-logs"
+
+- name: Download collector binaries
+  ansible.builtin.get_url:
+    url: "{{ tsstore_release_url_base }}/{{ tsstore_version }}/{{ item.name }}-{{ tsstore_version }}-linux-{{ tsstore_arch }}"
     dest: "{{ tsstore_bin_dir }}/{{ item.name }}"
     owner: root
     group: root
     mode: '0755'
+    force: true
   loop: "{{ tsstore_collectors }}"
   become: true
   notify: "Restart {{ item.name }}"
-  ignore_errors: true  # Some collectors may not exist
+
+- name: Create collector environment files
+  ansible.builtin.copy:
+    content: |
+      TSSTORE_API_KEY={{ tsstore_store_api_keys[item.name] }}
+    dest: "{{ tsstore_config_dir }}/{{ item.name }}.env"
+    owner: root
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  loop: "{{ tsstore_collectors }}"
+  become: true
+  no_log: true
+  notify: "Restart {{ item.name }}"
 
 - name: Create collector systemd services
   ansible.builtin.template:
@@ -24,6 +61,7 @@
   become: true
   notify:
     - Reload systemd
+    - "Restart {{ item.name }}"
 
 - name: Enable and start collector services
   ansible.builtin.systemd:

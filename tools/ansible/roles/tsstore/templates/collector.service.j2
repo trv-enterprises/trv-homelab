@@ -7,12 +7,11 @@ Requires=tsstore.service
 Type=simple
 User={{ tsstore_user }}
 Group={{ tsstore_group }}
+EnvironmentFile={{ tsstore_config_dir }}/{{ item.name }}.env
 ExecStart={{ tsstore_bin_dir }}/{{ item.name }} \
     -socket {{ tsstore_socket }} \
-    -store {{ item.name }} \
-{% if item.interval is defined %}
-    -interval {{ item.interval }}
-{% endif %}
+    -store {{ item.name }}{% if item.interval is defined %} \
+    -interval {{ item.interval }}{% endif %}
 
 Restart=always
 RestartSec=5

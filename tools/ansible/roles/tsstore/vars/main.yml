@@ -1,9 +1,11 @@
 ---
-# tsstore role variables
+# tsstore role internal constants.
+# Things the operator might want to override per host live in defaults/main.yml,
+# not here — vars/ has higher precedence than host_vars.
 
-tsstore_version: "0.5.3"
-tsstore_user: <user>
-tsstore_group: <user>
+# Service identity. Service user is created by the role if missing.
+tsstore_user: tsstore
+tsstore_group: tsstore
 
 # Binary locations
 tsstore_bin_dir: /usr/local/bin
@@ -15,27 +17,13 @@ tsstore_config_dir: /etc/tsstore
 tsstore_port: 21080
 tsstore_socket: "{{ tsstore_run_dir }}/tsstore.sock"
 
-# Collectors to enable (override per host in inventory)
-tsstore_collectors: []
-# Example:
-# tsstore_collectors:
-#   - name: system-stats
-#     interval: 20
-#   - name: journal-logs
+# Release-asset download base. Combined with tsstore_version (from defaults)
+# and the per-binary name + arch suffix.
+tsstore_release_url_base: "https://github.com/trv-enterprises/ts-store/releases/download"
 
-# Local path to built binaries (ts-store repo is sibling to trv-homelab)
-tsstore_local_bin_path: /path/to/ts-store/bin
-
-# MQTT streams (override per host in inventory)
-tsstore_mqtt_streams: []
-# Example:
-# tsstore_mqtt_streams:
-#   - store: system-stats
-#     broker_url: "tcp://broker:1883"
-#     topic: "hostname/system-stats"
-#     from: now
-#     include_timestamp: true
-#     cursor_interval: 60
-
-# Per-store API keys (set in vault, keyed by store name)
-tsstore_store_api_keys: {}
+# Recognized Go collectors. The role fails fast if tsstore_collectors
+# contains a name not in this list (prevents typos and stops attempts to
+# install non-existent binaries like sensehat).
+tsstore_known_collectors:
+  - system-stats
+  - journal-logs
