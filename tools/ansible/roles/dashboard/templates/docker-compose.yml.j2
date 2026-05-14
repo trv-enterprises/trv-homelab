@@ -38,6 +38,11 @@ services:
       # Server-wide gate that lets per-connection insecure_skip_verify take effect.
       # Required for api.rest connections to self-signed endpoints (e.g. Proxmox).
       - DASHBOARD_API_ALLOW_INSECURE_TLS={{ dashboard_api_allow_insecure_tls | default('false') }}
+      # Clerk identity provider. Setting CLERK_SECRET_KEY is the soft
+      # switch for Clerk mode — leave empty to keep the deployment on
+      # API-key + legacy auth (the homelab LXC pattern).
+      - CLERK_SECRET_KEY={{ clerk_secret_key | default('') }}
+      - CLERK_PUBLISHABLE_KEY={{ clerk_publishable_key | default('') }}
     depends_on:
       mongodb:
         condition: service_healthy

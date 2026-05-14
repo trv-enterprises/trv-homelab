@@ -1,0 +1,23 @@
+---
+# Dashboard prod-test Deployment Playbook
+#
+# Deploys the dashboard role to the dashboard-prod test VM.
+# Distinct from dashboard-deploy.yml because:
+#   - Targets the `test_deployments` group (not `dashboard`)
+#   - Does NOT clear the kiosk Chromium cache (kiosk doesn't talk to
+#     this deployment)
+#   - Expects clerk_publishable_key + clerk_secret_key from the
+#     dashboard-prod vault (inventory/group_vars/test_deployments/vault.yml)
+#
+# Deploy:
+#   make deploy-dashboard-prod
+#
+# Deploy specific version:
+#   make deploy-dashboard-prod DASHBOARD_VERSION=0.16.5
+
+- name: Deploy Dashboard (prod-test VM)
+  hosts: dashboard-prod
+  become: false
+
+  roles:
+    - dashboard
