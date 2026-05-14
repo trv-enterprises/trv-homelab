@@ -13,28 +13,6 @@
 #   9. Render mqtt_connections.json into per-store dirs
 #  10. Deploy collectors (binary download + systemd unit + start)
 
-# Pi-migration guard. trv-pi-001 was set up with a user-systemd
-# install at ~/bin/tsstore + ~/data/. Running this role against it
-# without first migrating data from ~/data → /var/lib/tsstore would
-# create an empty system-mode install alongside the working user-mode
-# one, and could conflict on port 21080. Until the migration playbook
-# exists, refuse to deploy here unless the caller explicitly opts in
-# (e.g., is running the migration manually and knows what they're
-# doing). Remove this task once the Pi is migrated.
-- name: Block deploy to trv-pi-001 until migration is complete
-  ansible.builtin.fail:
-    msg: >-
-      trv-pi-001 is not yet migrated to system-systemd. Running this
-      role here would conflict with the existing user-mode install on
-      port 21080 and leave the Pi in a half-deployed state. To proceed
-      anyway (e.g., as part of a planned migration), pass
-      `-e tsstore_pi_migrate_ok=true`. Otherwise, scope deploys to
-      other hosts with `--limit` (or `tsstore_hosts=...` via the
-      homelab-deploy MCP).
-  when:
-    - inventory_hostname == "trv-pi-001"
-    - not (tsstore_pi_migrate_ok | default(false) | bool)
-
 - name: Validate tsstore_admin_key is set
   ansible.builtin.fail:
     msg: >-
