@@ -43,6 +43,14 @@ services:
       # API-key + legacy auth (the homelab LXC pattern).
       - CLERK_SECRET_KEY={{ clerk_secret_key | default('') }}
       - CLERK_PUBLISHABLE_KEY={{ clerk_publishable_key | default('') }}
+      # Legacy GUID auth (X-User-ID header, ?user_id= query).
+      # Default false in the dashboard server itself; this homelab
+      # role explicitly enables it because the kiosk URL bookmarks
+      # and any admin re-keying flow rely on ?user_id= URLs.
+      # The dashboard-prod role does NOT set this (keeps it false),
+      # which is the right posture for any deployment fronted by
+      # a real IdP like Clerk.
+      - DASHBOARD_AUTH_ALLOW_LEGACY_GUID={{ dashboard_auth_allow_legacy_guid | default('true') }}
     depends_on:
       mongodb:
         condition: service_healthy
