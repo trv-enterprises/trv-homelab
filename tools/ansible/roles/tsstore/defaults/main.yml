@@ -6,7 +6,7 @@
 
 # Release version. Must match a tag in trv-enterprises/ts-store with
 # release assets named <binary>-<version>-linux-<arch>.
-tsstore_version: "v0.6.1"
+tsstore_version: "v0.6.5"
 
 # Collectors to enable (override per host).
 # Only Go collectors shipped in the ts-store release are supported here.
