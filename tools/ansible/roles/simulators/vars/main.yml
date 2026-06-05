@@ -10,8 +10,28 @@ simulators_deploy_dir: /root/simulators
 tsstore_port: 21080
 tsstore_internal_port: 21080
 
-# Location stores the data-writer publishes to.
+# Location stores the data-writer publishes to (flat, one column per sensor
+# type, one store per location). Plain stores — no schema applied.
 simulators_tsstore_stores:
   - warehouse
   - server-room
   - manufacturing
+
+# Combined "tidy" store the sensor-readings-writer publishes to: one record
+# per sensor reading, with location/sensor as dimension FIELDS rather than a
+# store-per-location. This is a SCHEMA store — its field set is fixed at
+# creation and must exactly match what the writer emits (see
+# dashboard/simulators/sensor-readings-writer/main.go SensorReading struct).
+# A schema store rejects any emitted field not declared here.
+simulators_tsstore_schema_stores:
+  sensor-readings:
+    schema:
+      fields:
+        - {index: 1, name: "timestamp", type: "int64"}
+        - {index: 2, name: "sensor_id", type: "string"}
+        - {index: 3, name: "sensor_type", type: "string"}
+        - {index: 4, name: "value", type: "float64"}
+        - {index: 5, name: "unit", type: "string"}
+        - {index: 6, name: "location", type: "string"}
+        - {index: 7, name: "status", type: "string"}
+        - {index: 8, name: "quality", type: "int32"}

@@ -32,3 +32,8 @@ ws_anomaly_rate: "0.002"
 # REST API simulator behavior.
 api_buffer_size: 1000
 api_generate_ms: 5000
+
+# Sensor-readings writer behavior (combined row-per-sensor schema store).
+sensor_readings_interval_ms: 1000
+sensor_readings_noise: "true"
+sensor_readings_anomaly_rate: "0.002"

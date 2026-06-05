@@ -116,14 +116,15 @@
   when: stores_response is failed or stores_response.json.stores is not defined or item not in stores_response.json.stores
   register: store_creation
 
-- name: Compute API key hash
-  ansible.builtin.command:
-    cmd: printf '%s' '{{ simulators_tsstore_api_key }}' | sha256sum | awk '{print $1}'
-  register: api_key_hash
-  changed_when: false
-  delegate_to: localhost
+# Use Jinja's hash('sha256') filter, NOT a shell `sha256sum` pipe: the command
+# module runs without a shell, so the pipe would be captured literally (it was —
+# producing a garbage hash like "tsstore_...|sha256sum|awk{print $1}").
+- name: Compute shared API key hash
+  ansible.builtin.set_fact:
+    simulators_api_key_hash: "{{ simulators_tsstore_api_key | hash('sha256') }}"
+  no_log: true
 
-- name: Write shared API key to new stores
+- name: Write shared API key to new location stores
   ansible.builtin.copy:
     dest: /tmp/tsstore-keys-{{ item.item }}.json
     content: |
@@ -132,7 +133,7 @@
         "keys": [
           {
             "id": "{{ simulators_tsstore_api_key[8:16] }}",
-            "hash": "{{ api_key_hash.stdout }}",
+            "hash": "{{ simulators_api_key_hash }}",
             "created_at": "{{ ansible_date_time.iso8601 }}",
             "note": "Shared key via Ansible deploy"
           }
@@ -142,24 +143,119 @@
   loop: "{{ store_creation.results }}"
   when: item.changed | default(false)
 
-- name: Copy key files into ts-store container
+- name: Copy location-store key files into ts-store container
   ansible.builtin.command:
     cmd: docker cp /tmp/tsstore-keys-{{ item.item }}.json simulators-tsstore:/data/{{ item.item }}/keys.json
   loop: "{{ store_creation.results }}"
   when: item.changed | default(false)
 
-- name: Clean up temporary key files
+# docker cp lands the file root-owned; ts-store runs as `tsstore` and must be
+# able to read keys.json (a root-owned 0600 file → 401 "authentication failed").
+- name: Fix location-store keys.json ownership
+  ansible.builtin.command:
+    cmd: docker exec -u root simulators-tsstore chown tsstore:tsstore /data/{{ item.item }}/keys.json
+  loop: "{{ store_creation.results }}"
+  when: item.changed | default(false)
+
+- name: Clean up temporary location-store key files
   ansible.builtin.file:
     path: /tmp/tsstore-keys-{{ item.item }}.json
     state: absent
   loop: "{{ store_creation.results }}"
   when: item.changed | default(false)
 
+# --- Combined "tidy" schema store(s) -----------------------------------------
+# Created as type=schema. Unlike the location stores above, the schema-store
+# handling is driven by ON-DISK STATE rather than the create task's `changed`
+# flag, so it is fully idempotent and self-healing: ts-store auto-generates a
+# random "Initial key" in keys.json on store creation (which would 401 our
+# shared-key writer), so we always reconcile keys.json to the shared-key hash
+# when it differs, and apply the schema whenever the store has none yet.
+
+# Schema stores MUST be created via the CLI, not the API. The POST /api/stores
+# endpoint silently IGNORES the `type` field and always creates a default
+# (json) store — its schema endpoint then rejects the PUT with "schema endpoint
+# only available for schema-type stores". `tsstore create --type schema` is the
+# only way to get a real schema store (matches the bare-metal tsstore role).
+# Run as the `tsstore` user so the new store dir is owned correctly.
+- name: Create schema stores (only if absent)
+  ansible.builtin.command:
+    cmd: >-
+      docker exec --user tsstore -e TSSTORE_DATA_PATH=/data simulators-tsstore
+      tsstore create {{ item.key }} --type schema
+      --blocks 200000 --data-size 512 --index-size 4096 --path /data
+  loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: stores_response is failed or stores_response.json.stores is not defined or item.key not in stores_response.json.stores
+  register: schema_store_created
+  changed_when: "'STORE CREATED' in schema_store_created.stdout"
+
+- name: Read existing schema-store keys.json (if any)
+  ansible.builtin.command:
+    cmd: docker exec simulators-tsstore cat /data/{{ item.key }}/keys.json
+  loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: schema_keys_existing
+  changed_when: false
+  failed_when: false
+
+- name: Reconcile schema-store keys.json to the shared key
+  ansible.builtin.copy:
+    dest: /tmp/tsstore-keys-{{ item.item.key }}.json
+    content: |
+      {
+        "store_name": "{{ item.item.key }}",
+        "keys": [
+          {
+            "id": "{{ simulators_tsstore_api_key[8:16] }}",
+            "hash": "{{ simulators_api_key_hash }}",
+            "created_at": "{{ ansible_date_time.iso8601 }}",
+            "note": "Shared key via Ansible deploy"
+          }
+        ]
+      }
+    mode: '0600'
+  loop: "{{ schema_keys_existing.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: >
+    item.rc != 0 or
+    (item.stdout | from_json).keys[0].hash | default('') != simulators_api_key_hash
+  register: schema_keys_written
+
+- name: Copy reconciled schema-store key files into ts-store container
+  ansible.builtin.command:
+    cmd: docker cp /tmp/tsstore-keys-{{ item.item.item.key }}.json simulators-tsstore:/data/{{ item.item.item.key }}/keys.json
+  loop: "{{ schema_keys_written.results }}"
+  loop_control:
+    label: "{{ item.item.item.key | default('skipped') }}"
+  when: not (item.skipped | default(false))
+
+# Same ownership fix as the location stores — docker cp lands root-owned.
+- name: Fix schema-store keys.json ownership
+  ansible.builtin.command:
+    cmd: docker exec -u root simulators-tsstore chown tsstore:tsstore /data/{{ item.item.item.key }}/keys.json
+  loop: "{{ schema_keys_written.results }}"
+  loop_control:
+    label: "{{ item.item.item.key | default('skipped') }}"
+  when: not (item.skipped | default(false))
+
+- name: Clean up temporary schema-store key files
+  ansible.builtin.file:
+    path: /tmp/tsstore-keys-{{ item.item.item.key }}.json
+    state: absent
+  loop: "{{ schema_keys_written.results }}"
+  loop_control:
+    label: "{{ item.item.item.key | default('skipped') }}"
+  when: not (item.skipped | default(false))
+
 - name: Restart ts-store to reload keys
   ansible.builtin.command:
     cmd: docker compose restart tsstore
     chdir: "{{ simulators_deploy_dir }}"
-  when: store_creation.changed
+  when: store_creation.changed or (schema_keys_written.changed | default(false))
 
 - name: Wait for ts-store to be healthy after key reload
   ansible.builtin.command:
@@ -169,7 +265,40 @@
   retries: 15
   delay: 2
   changed_when: false
-  when: store_creation.changed
+  when: store_creation.changed or (schema_keys_written.changed | default(false))
+
+# Apply the schema, authenticating with the store's own (now shared) API key —
+# the admin key is rejected by this endpoint. Idempotent: a schema-type store
+# with NO schema set yet returns HTTP 404 {"error":"no schema defined"} on GET
+# (verified on v0.6.1); once a schema is set the GET returns 200 with the field
+# list. We PUT only on the 404 case, so re-deploys never re-PUT (schema is
+# immutable once set — a re-PUT would error).
+- name: Check current schema of schema stores
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores/{{ item.key }}/schema"
+    method: GET
+    headers:
+      X-API-Key: "{{ simulators_tsstore_api_key }}"
+    status_code: [200, 404]
+  loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: schema_current
+  changed_when: false
+
+- name: Apply schema to schema stores that have none
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores/{{ item.item.key }}/schema"
+    method: PUT
+    headers:
+      X-API-Key: "{{ simulators_tsstore_api_key }}"
+    body_format: json
+    body: "{{ item.item.value.schema }}"
+    status_code: 200
+  loop: "{{ schema_current.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: item.status == 404
 
 - name: Show service status
   ansible.builtin.command:
