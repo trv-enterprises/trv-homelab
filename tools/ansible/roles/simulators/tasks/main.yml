@@ -172,24 +172,29 @@
 # shared-key writer), so we always reconcile keys.json to the shared-key hash
 # when it differs, and apply the schema whenever the store has none yet.
 
-# Schema stores MUST be created via the CLI, not the API. The POST /api/stores
-# endpoint silently IGNORES the `type` field and always creates a default
-# (json) store — its schema endpoint then rejects the PUT with "schema endpoint
-# only available for schema-type stores". `tsstore create --type schema` is the
-# only way to get a real schema store (matches the bare-metal tsstore role).
-# Run as the `tsstore` user so the new store dir is owned correctly.
+# Create the schema store via the API. The type field is `data_type` (NOT
+# `type`) — the same key the dashboard's ts-store client uses. ts-store rejects
+# an unknown field rather than silently defaulting to a json store, so a wrong
+# field name would fail loudly here.
 - name: Create schema stores (only if absent)
-  ansible.builtin.command:
-    cmd: >-
-      docker exec --user tsstore -e TSSTORE_DATA_PATH=/data simulators-tsstore
-      tsstore create {{ item.key }} --type schema
-      --blocks 200000 --data-size 512 --index-size 4096 --path /data
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores"
+    method: POST
+    headers:
+      X-Admin-Key: "{{ simulators_tsstore_admin_key }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "{{ item.key }}"
+      data_type: schema
+      num_blocks: 200000
+      data_block_size: 512
+      index_block_size: 4096
+    status_code: [200, 201]
   loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
   when: stores_response is failed or stores_response.json.stores is not defined or item.key not in stores_response.json.stores
-  register: schema_store_created
-  changed_when: "'STORE CREATED' in schema_store_created.stdout"
 
 - name: Read existing schema-store keys.json (if any)
   ansible.builtin.command:
