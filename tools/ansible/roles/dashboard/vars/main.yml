@@ -4,12 +4,21 @@
 # GitHub Container Registry
 ghcr_registry: ghcr.io/trv-enterprises
 
-# Image names
-dashboard_server_image: "{{ ghcr_registry }}/dashboard-server"
-dashboard_client_image: "{{ ghcr_registry }}/dashboard-client"
+# Image names (renamed dashboard-* -> outpost-* for the TRV Outpost rebrand).
+# IMPORTANT: only tags published AFTER the rename exist under the outpost-*
+# names. Pre-rename tags (0.27.2 and earlier) only exist under the OLD
+# dashboard-* names. So this var set ONLY works with a post-rename version —
+# the dashboard_version default below is a PRE-rename tag and will fail to pull
+# (outpost-server:0.18.3 does not exist). Pass a post-rename version via
+# --extra-vars "dashboard_version=X.Y.Z" until the default is bumped to one.
+dashboard_server_image: "{{ ghcr_registry }}/outpost-server"
+dashboard_client_image: "{{ ghcr_registry }}/outpost-client"
 
 # Default version (override with --extra-vars "dashboard_version=0.3.0")
 # Note: GHCR tags do NOT have 'v' prefix
+# WARNING: 0.18.3 is a PRE-rename tag — its images only exist under the old
+# dashboard-* names, so the default no longer matches the image vars above.
+# Bump this to the first post-rename release once it publishes.
 dashboard_version: 0.18.3
 
 # Deployment directory on target
