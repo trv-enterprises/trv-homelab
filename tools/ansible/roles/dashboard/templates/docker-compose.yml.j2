@@ -32,7 +32,11 @@ services:
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
       - DASHBOARD_MONGODB_DATABASE=dashboard
-      - DASHBOARD_LLM_API_KEY={{ anthropic_api_key }}
+      - DASHBOARD_LLM_API_KEY={{ anthropic_api_key | default('') }}
+      # In-app AI key (Component AI agent + Dashboard Assistant). Sourced from
+      # the deploy-time env ASSISTANT_ANTHROPIC_API_KEY (see role vars). This is
+      # the path used to enable the AIs on prod + pre-prod.
+      - ASSISTANT_ANTHROPIC_API_KEY={{ assistant_anthropic_api_key }}
       # Address ts-store dials back to for push-mode streaming callbacks.
       - DASHBOARD_HOST={{ lan_ip | default(ansible_host) }}:3001
       # Server-wide gate that lets per-connection insecure_skip_verify take effect.

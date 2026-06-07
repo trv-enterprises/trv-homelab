@@ -27,3 +27,13 @@ dashboard_domain: ":80"
 
 # Required: Set via --extra-vars or environment
 # anthropic_api_key: "sk-ant-..."
+
+# Anthropic key for the in-app AI features (Component AI agent + Dashboard
+# Assistant). The server resolves keys in order DASHBOARD_LLM_API_KEY ->
+# ASSISTANT_ANTHROPIC_API_KEY -> ANTHROPIC_API_KEY; we deliver it via
+# ASSISTANT_ANTHROPIC_API_KEY. Sourced from the DEPLOY-TIME ENVIRONMENT (not the
+# vault, not the repo) — export ASSISTANT_ANTHROPIC_API_KEY before deploying.
+# Falls back to anthropic_api_key (vault) if the env var is unset, so existing
+# deploys keep working. The app's `ai.enabled` master setting (default true,
+# stored in Mongo) must also be on; a key alone does not enable AI.
+assistant_anthropic_api_key: "{{ lookup('env', 'ASSISTANT_ANTHROPIC_API_KEY') | default(anthropic_api_key | default(''), true) }}"

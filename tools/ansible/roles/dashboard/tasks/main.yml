@@ -1,10 +1,15 @@
 ---
 # Dashboard deployment tasks
 
-- name: Validate required variables
+- name: Validate an Anthropic key is available for AI features
   ansible.builtin.fail:
-    msg: "anthropic_api_key is required. Pass via --extra-vars or set in vault."
-  when: anthropic_api_key is not defined or anthropic_api_key == ""
+    msg: >-
+      An Anthropic key is required for the dashboard AI features. Provide ONE of:
+      ASSISTANT_ANTHROPIC_API_KEY (deploy-time env, preferred) or anthropic_api_key
+      (vault / --extra-vars).
+  when: >
+    (assistant_anthropic_api_key is not defined or assistant_anthropic_api_key == "") and
+    (anthropic_api_key is not defined or anthropic_api_key == "")
 
 - name: Validate GHCR token
   ansible.builtin.fail:
