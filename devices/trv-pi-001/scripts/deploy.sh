@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy tsstore to trv-pi-001
 # Usage: ./deploy.sh [version]
-# Example: ./deploy.sh v0.3.0-rc1
+# Example: ./deploy.sh v0.5.4
 
 set -euo pipefail
 
