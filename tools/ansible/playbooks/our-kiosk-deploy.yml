@@ -45,6 +45,24 @@
     kiosk_mic_gain: 3
 
   tasks:
+    # Render display/.env from vault BEFORE the local Vite build. Vite
+    # bakes VITE_* values into the bundle at build time, so the file
+    # must exist with real values before `npm run build` runs. We
+    # restore .env to a non-secret placeholder after the build so the
+    # secret doesn't sit on disk in the source tree.
+    - name: Render display/.env from vault (build-time)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: |
+          VITE_API_URL={{ kiosk_api_url }}
+          VITE_FRIGATE_URL=http://100.86.119.121:5000
+          VITE_DASHBOARD_HOST=http://100.97.221.61
+          VITE_DASHBOARD_API_KEY={{ kiosk_dashboard_api_key }}
+          VITE_MQTT_WS_URL=ws://{{ kiosk_mqtt_broker }}:9001
+        dest: "{{ kiosk_src_dir }}/display/.env"
+        mode: '0600'
+      no_log: true
+
     # Build locally first
     - name: Build display app locally
       delegate_to: localhost
@@ -53,6 +71,19 @@
         chdir: "{{ kiosk_src_dir }}/display"
       register: build_result
       changed_when: true
+
+    # Reset display/.env to a placeholder so the API key doesn't sit on
+    # disk in the source tree after the build is done. The bundle in
+    # dist/ already has the values baked in.
+    - name: Reset display/.env after build (clear secrets from source tree)
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: |
+          # Rendered fresh from vault by `make deploy-kiosk` on each
+          # deploy. Do not edit by hand — your edits will be overwritten.
+          # See trv-homelab/tools/ansible/playbooks/our-kiosk-deploy.yml.
+        dest: "{{ kiosk_src_dir }}/display/.env"
+        mode: '0644'
 
     # Create deployment directory (no sudo needed for home dir)
     - name: Create deployment directory
