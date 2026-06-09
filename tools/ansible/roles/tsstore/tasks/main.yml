@@ -126,10 +126,56 @@
   retries: 15
   delay: 2
 
-# Per-store API key preservation. Mirror the simulators role pattern:
-# the running ts-store auto-creates a store on first write, but we
-# pre-create the directory and seed keys.json so the collector can
-# authenticate from the moment it starts.
+# Store creation. ts-store does NOT auto-create a store on first write —
+# a write to a non-existent store fails ("failed to open meta file ...
+# meta.tsdb: no such file or directory"), and a schema-type store further
+# rejects writes until its schema is registered. So we explicitly create
+# each collector's store here (when missing); the schema is applied a few
+# tasks below, AFTER keys.json is reseeded with the vault key (the schema
+# endpoint authenticates with the store's own API key, not the admin key).
+#
+# Idempotent: keyed on the presence of meta.tsdb, so existing stores
+# (including manually-created ones on trv-srv-001 / trv-pi-001) are left
+# untouched — their data and schema are never clobbered.
+
+- name: Resolve effective store specs (role defaults + host overrides)
+  ansible.builtin.set_fact:
+    tsstore_effective_store_specs: >-
+      {{ tsstore_collector_store_specs | combine(tsstore_store_specs, recursive=True) }}
+
+- name: Check which stores already exist (meta.tsdb present)
+  ansible.builtin.stat:
+    path: "{{ tsstore_data_dir }}/{{ item.name }}/meta.tsdb"
+  loop: "{{ tsstore_collectors }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: tsstore_meta_stat
+  become: true
+
+- name: Create stores that don't exist yet
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_bin_dir }}/tsstore create {{ item.item.name }}
+      --path {{ tsstore_data_dir }}
+      --type {{ (tsstore_effective_store_specs[item.item.name] | default({})).type | default('json') }}
+      --blocks {{ (tsstore_effective_store_specs[item.item.name] | default({})).blocks | default(1024) }}
+    # tsstore reads an optional config.json from cwd; run from a dir the
+    # service user can read to avoid a "permission denied" on config.json.
+    chdir: "{{ tsstore_data_dir }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  loop: "{{ tsstore_meta_stat.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not item.stat.exists
+  become: true
+  become_user: "{{ tsstore_user }}"
+  register: tsstore_created
+  changed_when: true
+
+# Per-store API key preservation. The role seeds keys.json with the
+# SHA-256 of the vault-managed key so the collector can authenticate from
+# the moment it starts, and the same key survives across re-deploys.
 - name: Pre-create per-store data directories
   ansible.builtin.file:
     path: "{{ tsstore_data_dir }}/{{ item.key }}"
@@ -212,6 +258,93 @@
   become: true
   no_log: true
   notify: Restart tsstore
+
+# Apply the schema to stores we just created this run. Runs AFTER keys.json
+# is reseeded with the vault key, because the schema endpoint authenticates
+# with the store's API key (the admin key is rejected, 401). ts-store reads
+# keys.json per request, so the deferred "Restart tsstore" handler need not
+# have fired yet. Skipped for pre-existing stores (schema is immutable once
+# set) and for stores whose spec has no `schema` block (json/text/binary).
+- name: Apply schema to newly-created schema-type stores
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores/{{ item.item.name }}/schema"
+    method: PUT
+    headers:
+      X-API-Key: "{{ tsstore_store_api_keys[item.item.name] }}"
+    body_format: json
+    body: "{{ tsstore_effective_store_specs[item.item.name].schema }}"
+    status_code: 200
+  loop: "{{ tsstore_meta_stat.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - not item.stat.exists
+    - (tsstore_effective_store_specs[item.item.name] | default({})).schema is defined
+  become: true
+  no_log: true
+
+# Schema reconciliation for stores that ALREADY exist (e.g. after a
+# tsstore_version bump whose collector emits new fields). ts-store reads
+# project every record through the active schema by index, so the only
+# SAFE evolution is APPEND: add a new field name at the next free index.
+# Renaming/retyping/dropping an existing field is read-destructive and is
+# refused here (the play fails loudly rather than silently breaking data).
+#
+# Reconciliation keys on field NAME, not index — existing stores keep
+# whatever indices/types they already assigned to shared names (e.g.
+# trv-srv-001 vs trv-srv-002 differ on temp.nvme_c's index/type, both ok).
+
+- name: Identify existing schema-type stores to reconcile
+  ansible.builtin.set_fact:
+    tsstore_schema_reconcile: >-
+      {{
+        tsstore_meta_stat.results
+        | selectattr('stat.exists')
+        | map(attribute='item.name')
+        | select('in', (tsstore_effective_store_specs
+                        | dict2items
+                        | selectattr('value.schema', 'defined')
+                        | map(attribute='key') | list))
+        | list
+      }}
+
+# A single Python helper does the GET → name-keyed diff → conditional PUT
+# per store. This is far more robust than reconciling name/type/index in
+# Jinja. Pure stdlib (urllib), runs on the target as the service user.
+- name: Install schema-reconcile helper
+  ansible.builtin.template:
+    src: schema_reconcile.py.j2
+    dest: "{{ tsstore_config_dir }}/schema_reconcile.py"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0750'
+  become: true
+  when: tsstore_schema_reconcile | length > 0
+
+- name: Write desired schema for each store to reconcile
+  ansible.builtin.copy:
+    content: "{{ tsstore_effective_store_specs[item].schema | to_nice_json }}"
+    dest: "{{ tsstore_config_dir }}/schema_desired_{{ item }}.json"
+    owner: "{{ tsstore_user }}"
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  loop: "{{ tsstore_schema_reconcile }}"
+  become: true
+
+- name: Reconcile schema (append-only) for existing schema-type stores
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_python | default('/usr/bin/python3') }}
+      {{ tsstore_config_dir }}/schema_reconcile.py
+      --port {{ tsstore_port }}
+      --store {{ item }}
+      --key {{ tsstore_store_api_keys[item] }}
+      --desired {{ tsstore_config_dir }}/schema_desired_{{ item }}.json
+  loop: "{{ tsstore_schema_reconcile }}"
+  register: tsstore_reconcile
+  changed_when: "'CHANGED' in tsstore_reconcile.stdout"
+  become: true
+  no_log: true
 
 # Even when hash matches and the file isn't rewritten, ensure ownership
 # is correct. Pre-existing keys.json from a tviviano-run install will

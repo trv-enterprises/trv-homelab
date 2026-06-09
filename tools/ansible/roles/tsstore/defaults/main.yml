@@ -6,7 +6,7 @@
 
 # Release version. Must match a tag in trv-enterprises/ts-store with
 # release assets named <binary>-<version>-linux-<arch>.
-tsstore_version: "v0.6.6"
+tsstore_version: "v0.6.8"
 
 # Collectors to enable (override per host).
 # Only Go collectors shipped in the ts-store release are supported here.
@@ -27,3 +27,11 @@ tsstore_mqtt_streams: []
 # Values are typically vault references like "{{ pi001_system_stats_api_key }}".
 # The role preserves these across re-deploys via SHA-256 of the key in keys.json.
 tsstore_store_api_keys: {}
+
+# Per-store creation overrides, keyed by store name. Merged over the
+# role's tsstore_collector_store_specs (vars/main.yml) so a host can
+# override type/blocks/schema for a store without editing the role.
+# Usually left empty. Example:
+#   tsstore_store_specs:
+#     system-stats: {type: json, blocks: 20000}
+tsstore_store_specs: {}

@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+# {{ ansible_managed }}
+#
+# Append-only schema reconciliation for a ts-store schema-type store.
+#
+# ts-store reads project every record through the ACTIVE schema by field
+# index, so the only non-destructive evolution is APPEND: add a new field
+# NAME at the next free index. This helper:
+#   * GETs the live schema for a store,
+#   * compares it (by name) against the desired field set,
+#   * FAILS (exit 2) if any desired field shares a name with a live field
+#     but a different type — that is a rename/retype, which would require a
+#     store recreation and lose history,
+#   * otherwise PUTs the live fields PLUS any missing names appended at the
+#     next free indices (keeping every existing field at its current index),
+#   * prints "CHANGED" to stdout iff it modified the schema (for Ansible
+#     changed_when), or "OK" if already in sync.
+#
+# Pure stdlib (urllib) so it runs anywhere the tsstore service user can.
+
+import argparse
+import json
+import sys
+import urllib.request
+import urllib.error
+
+
+def api(method, url, key, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("X-API-Key", key)
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            raw = r.read().decode()
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as e:
+        sys.stderr.write("HTTP %s on %s %s: %s\n"
+                         % (e.code, method, url, e.read().decode()))
+        raise
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", required=True)
+    ap.add_argument("--store", required=True)
+    ap.add_argument("--key", required=True)
+    ap.add_argument("--desired", required=True,
+                    help="path to JSON file: {\"fields\":[...]}")
+    args = ap.parse_args()
+
+    base = "http://localhost:%s/api/stores/%s/schema" % (args.port, args.store)
+
+    with open(args.desired) as f:
+        desired = json.load(f)
+    desired_fields = desired.get("fields", [])
+
+    live = api("GET", base, args.key)
+    live_fields = live.get("fields", [])
+    live_by_name = {f["name"]: f for f in live_fields}
+
+    # Conflict = desired field whose name already exists live but with a
+    # different type. ts-store forbids modifying an existing field.
+    conflicts = [
+        (d["name"], live_by_name[d["name"]]["type"], d["type"])
+        for d in desired_fields
+        if d["name"] in live_by_name and d["type"] != live_by_name[d["name"]]["type"]
+    ]
+    if conflicts:
+        for name, live_t, want_t in conflicts:
+            sys.stderr.write(
+                "BREAKING: store '%s' field '%s' is live type '%s' but desired "
+                "'%s'. ts-store cannot modify an existing field; this needs a "
+                "store recreation (loses history).\n"
+                % (args.store, name, live_t, want_t))
+        sys.exit(2)
+
+    # Appends = desired names not present live.
+    missing = [d for d in desired_fields if d["name"] not in live_by_name]
+    if not missing:
+        print("OK")
+        return
+
+    # Keep every existing field at its current index; append missing names
+    # at the next free indices (above the current max).
+    next_idx = max([f["index"] for f in live_fields], default=0) + 1
+    merged = list(live_fields)
+    for d in missing:
+        merged.append({"index": next_idx, "name": d["name"], "type": d["type"]})
+        next_idx += 1
+
+    api("PUT", base, args.key, {"fields": merged})
+    print("CHANGED appended=%s" % ",".join(d["name"] for d in missing))
+
+
+if __name__ == "__main__":
+    main()
