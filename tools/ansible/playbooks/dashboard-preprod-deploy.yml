@@ -1,22 +1,26 @@
 ---
-# Dashboard prod-test Deployment Playbook
+# Dashboard PRE-prod Deployment Playbook
 #
-# Deploys the dashboard role to the dashboard-prod test VM.
+# Deploys the dashboard role to the dashboard-preprod target (LXC 104).
+# This is the PRE-prod / pen-test box, NOT production (prod is the
+# `dashboard` host, LXC 100, via dashboard-deploy.yml). Renamed from
+# dashboard-prod-deploy.yml on 2026-06-06 to end the naming confusion.
 # Distinct from dashboard-deploy.yml because:
 #   - Targets the `test_deployments` group (not `dashboard`)
 #   - Does NOT clear the kiosk Chromium cache (kiosk doesn't talk to
 #     this deployment)
 #   - Expects clerk_publishable_key + clerk_secret_key from the
-#     dashboard-prod vault (inventory/group_vars/test_deployments/vault.yml)
+#     `dashboard-prod` vault identity (inventory/group_vars/test_deployments/
+#     vault.yml) — the vault label was intentionally NOT renamed.
 #
 # Deploy:
-#   make deploy-dashboard-prod
+#   make deploy-dashboard-preprod
 #
 # Deploy specific version:
-#   make deploy-dashboard-prod DASHBOARD_VERSION=0.16.5
+#   make deploy-dashboard-preprod DASHBOARD_VERSION=0.16.5
 
-- name: Deploy Dashboard (prod-test VM)
-  hosts: dashboard-prod
+- name: Deploy Dashboard (pre-prod / pen-test)
+  hosts: dashboard-preprod
   become: false
 
   roles:
