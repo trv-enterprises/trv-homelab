@@ -11,7 +11,7 @@ tsstore_image: "ghcr.io/trv-enterprises/ts-store:{{ tsstore_version }}"
 
 # Local source path (synced to remote). Assumes trv-homelab and
 # dashboard are sibling repos under the same parent.
-simulators_source: "{{ playbook_dir }}/../../../../../dashboard/simulators"
+simulators_source: "{{ playbook_dir }}/../../../../dashboard/simulators"
 
 # Data-writer behavior — adjust per environment as needed.
 data_writer_interval_ms: 1000
