@@ -4,17 +4,22 @@ SenseHat data collector for tsstore via Unix socket.
 Reads temperature, humidity, pressure, and accelerometer data.
 """
 
+import os
 import socket
 import json
 import time
 import sys
 from sense_hat import SenseHat
 
-# Configuration
-SOCKET_PATH = "/home/<user>/run/tsstore.sock"
+# Configuration. Socket path and API key come from the environment (the
+# systemd unit supplies them via EnvironmentFile); no secrets in source.
+SOCKET_PATH = os.environ.get("TSSTORE_SOCKET_PATH", "/var/run/tsstore/tsstore.sock")
 STORE_NAME = "sensehat"
-API_KEY = "CHANGEME"
+API_KEY = os.environ.get("TSSTORE_API_KEY")
 SAMPLE_RATE = 1.0  # Hz (samples per second)
+
+if not API_KEY:
+    sys.exit("TSSTORE_API_KEY env var is required")
 
 def connect_and_auth(socket_path, store_name, api_key):
     """Connect to Unix socket and authenticate."""

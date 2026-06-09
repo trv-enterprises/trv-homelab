@@ -1,11 +1,15 @@
 [Unit]
 Description=SenseHat data collector for tsstore
-After=tsstore.service
-Requires=tsstore.service
+# tsstore now runs as a system unit (managed by the trv-homelab Ansible
+# role). A user unit can't Requires= a system service, so we don't try —
+# the collector retries until the socket appears.
+After=default.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/<user>/tsstore/scripts/sensehat-to-tsstore.py
+# TSSTORE_API_KEY and TSSTORE_SOCKET_PATH are supplied here (not in source).
+EnvironmentFile=%h/.config/tsstore/sensehat.env
+ExecStart=/usr/bin/python3 %h/tsstore/scripts/sensehat-to-tsstore.py
 Restart=always
 RestartSec=10
 
