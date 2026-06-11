@@ -11,9 +11,23 @@ services:
 {% endif %}
     environment:
       - DOMAIN={{ dashboard_domain }}
+{% if dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}
+      # Env-gated TLS cert source (outpost-client >= build 1964 / commit 5deb552
+      # expands {$CADDY_TLS_DIRECTIVE} in its Caddyfile). For the Tailscale path
+      # this is `tls { get_certificate tailscale }`, which makes Caddy pull a
+      # publicly-trusted Let's Encrypt cert for the .ts.net DOMAIN from the local
+      # tailscaled over the socket mounted below. Empty/unset => unchanged.
+      - CADDY_TLS_DIRECTIVE={{ dashboard_caddy_tls_directive }}
+{% endif %}
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+{% if dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}
+      # tailscaled socket from the LXC host, so Caddy's tailscale cert module can
+      # request the cert at handshake time. The LXC (104) is itself a tailnet
+      # node, so the socket exists at this path inside the container's host.
+      - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock
+{% endif %}
     depends_on:
       server:
         condition: service_healthy

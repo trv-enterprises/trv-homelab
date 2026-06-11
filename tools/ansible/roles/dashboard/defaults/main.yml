@@ -19,3 +19,14 @@ dashboard_domain: ":80"
 # serves TLS off its internal CA. When true, the template publishes 443 and
 # appends https://<ansible_host>[,https://<lan_ip>] to the server CORS list.
 dashboard_enable_https: false
+
+# TLS cert-source directive injected into the client image's Caddyfile via the
+# CADDY_TLS_DIRECTIVE env (outpost-client >= build 1964 / commit 5deb552). Empty
+# default => no directive (HTTP-only, or public ACME for a real public DOMAIN);
+# prod (LXC 100) unaffected. Set in host_vars for an HTTPS box, e.g. the
+# Tailscale path: "tls { get_certificate tailscale }" with a .ts.net DOMAIN.
+# Only takes effect when dashboard_enable_https is also true; when set, the
+# template also bind-mounts the tailscaled socket into the caddy container.
+# NOTE: do NOT use a bare-IP DOMAIN with HTTPS — the IP-SAN cert is rejected by
+# Chromium/Firefox at the handshake. Always a hostname.
+dashboard_caddy_tls_directive: ""
