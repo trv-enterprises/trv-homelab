@@ -12,12 +12,12 @@ services:
     environment:
       - DOMAIN={{ dashboard_domain }}
 {% if dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}
-      # Env-gated TLS cert source (outpost-client >= build 1964 / commit 5deb552
-      # expands {$CADDY_TLS_DIRECTIVE} in its Caddyfile). For the Tailscale path
-      # this is `tls { get_certificate tailscale }`, which makes Caddy pull a
-      # publicly-trusted Let's Encrypt cert for the .ts.net DOMAIN from the local
-      # tailscaled over the socket mounted below. Empty/unset => unchanged.
-      - CADDY_TLS_DIRECTIVE={{ dashboard_caddy_tls_directive }}
+      # Env-gated TLS cert source (outpost-client >= 0.29.3 expands
+      # {$CADDY_TLS_DIRECTIVE} in its Caddyfile). The value is emitted with REAL
+      # newlines (\n in a double-quoted list item, which Compose turns into a
+      # block scalar) because Caddyfile requires a block's `{` to end its line —
+      # a one-line `tls { ... }` fails to parse. tailscaled socket mounted below.
+      - "CADDY_TLS_DIRECTIVE={{ dashboard_caddy_tls_directive | replace('\n', '\\n') }}"
 {% endif %}
     volumes:
       - caddy_data:/data
