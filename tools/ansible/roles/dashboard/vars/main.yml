@@ -20,10 +20,12 @@ dashboard_version: 0.28.0
 # Deployment directory on target
 dashboard_deploy_dir: /opt/dashboard
 
-# Domain for Caddy (use IP or hostname for direct access)
-# :80 prefix forces HTTP-only mode (no TLS)
-# IP address alone would trigger self-signed TLS which has issues
-dashboard_domain: ":80"
+# NOTE: dashboard_domain and dashboard_enable_https live in defaults/main.yml,
+# NOT here. Role vars/ outranks inventory host_vars, so anything here CANNOT be
+# overridden per-host — which is exactly what pre-prod needs to do for HTTPS.
+# (This bit us 2026-06-10: a dashboard_domain set here silently overrode the
+# pre-prod host_var and the box stayed on :80.) Keep overridable knobs in
+# defaults/.
 
 # Required: Set via --extra-vars or environment
 # anthropic_api_key: "sk-ant-..."

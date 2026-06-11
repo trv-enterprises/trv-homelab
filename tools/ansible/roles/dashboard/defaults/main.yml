@@ -1,0 +1,21 @@
+---
+# Dashboard role defaults.
+#
+# These are LOW precedence on purpose: inventory host_vars override them.
+# Host/environment-specific knobs (domain, HTTPS) MUST live here, not in
+# vars/main.yml — role vars/ outranks host_vars and can't be overridden
+# per-host. (Learned 2026-06-10 when a vars/ dashboard_domain silently kept
+# pre-prod on :80 despite the host_var.)
+
+# Caddy site address.
+# ":80" forces HTTP-only (no TLS). A bare IP or hostname triggers Caddy
+# automatic HTTPS; for a bare IP, Caddy 2.x uses its INTERNAL (self-signed) CA
+# — that is the pre-prod path. Prod (LXC 100) keeps ":80".
+dashboard_domain: ":80"
+
+# HTTPS toggle. Default false: prod stays HTTP-only and the template is a no-op
+# (443 unpublished, CORS list unchanged byte-for-byte). Pre-prod (LXC 104)
+# sets this true in host_vars and points dashboard_domain at its IP, so Caddy
+# serves TLS off its internal CA. When true, the template publishes 443 and
+# appends https://<ansible_host>[,https://<lan_ip>] to the server CORS list.
+dashboard_enable_https: false

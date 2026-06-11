@@ -6,6 +6,9 @@ services:
     image: {{ dashboard_client_image }}:{{ dashboard_version }}
     ports:
       - "80:80"
+{% if dashboard_enable_https | default(false) %}
+      - "443:443"
+{% endif %}
     environment:
       - DOMAIN={{ dashboard_domain }}
     volumes:
@@ -27,7 +30,13 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DASHBOARD_CORS_ORIGINS=http://<dashboard-lan-ip>,http://{{ lan_ip | default(ansible_host) }}
+      # CORS allowlist. The client Caddy proxies /api/* to server:3001 so the
+      # browser sees a single same-origin host, but the server still enforces
+      # this list against the request Origin. When HTTPS is on (pre-prod), the
+      # browser's Origin becomes https://<host>, which must be allowlisted or
+      # cross-origin requests (incl. Clerk flows) are rejected. We append the
+      # https:// variants rather than replace, so the http:// entries stay valid.
+      - DASHBOARD_CORS_ORIGINS=http://<dashboard-lan-ip>,http://{{ lan_ip | default(ansible_host) }}{{ (',https://' ~ ansible_host) if (dashboard_enable_https | default(false)) else '' }}{{ (',https://' ~ lan_ip) if (dashboard_enable_https | default(false)) and (lan_ip is defined) else '' }}
       - DASHBOARD_SERVER_MODE=release
       - DASHBOARD_SERVER_HOST=0.0.0.0
       - DASHBOARD_MONGODB_URI=mongodb://mongodb:27017
