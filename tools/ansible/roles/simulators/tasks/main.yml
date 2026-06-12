@@ -190,7 +190,7 @@
       num_blocks: 200000
       data_block_size: 512
       index_block_size: 4096
-    status_code: [200, 201]
+    status_code: [200, 201, 409]
   loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
