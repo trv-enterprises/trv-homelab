@@ -1,6 +1,6 @@
 # Fleet Inventory
 
-**Generated:** {{ ansible_date_time.iso8601 }}
+**Generated:** {{ ansible_facts.date_time.iso8601 }}
 **Hosts Scanned:** {{ hostvars | length }}
 
 ---
@@ -67,7 +67,7 @@
 |------|----|----|-----------|--------|----------|--------|
 {% for host in groups['all'] %}
 {% if hostvars[host].mem_used_mb is defined %}
-| {{ host }} | {{ hostvars[host].ansible_host }} | {{ hostvars[host].role | default('N/A') }} | {{ hostvars[host].ansible_processor_vcpus }} | {{ hostvars[host].mem_used_mb }}MB / {{ hostvars[host].ansible_memtotal_mb }}MB ({{ hostvars[host].mem_pct }}%) | {{ (hostvars[host].disk_mounts | selectattr('mount', 'equalto', '/') | first).pct | default('N/A') }} | OK |
+| {{ host }} | {{ hostvars[host].ansible_host }} | {{ hostvars[host].role | default('N/A') }} | {{ hostvars[host].ansible_facts.processor_vcpus }} | {{ hostvars[host].mem_used_mb }}MB / {{ hostvars[host].ansible_facts.memtotal_mb }}MB ({{ hostvars[host].mem_pct }}%) | {{ (hostvars[host].disk_mounts | selectattr('mount', 'equalto', '/') | first).pct | default('N/A') }} | OK |
 {% else %}
 | {{ host }} | {{ hostvars[host].ansible_host }} | {{ hostvars[host].role | default('N/A') }} | - | - | - | UNREACHABLE |
 {% endif %}

@@ -5,7 +5,7 @@
 **LAN IP:** {{ lan_ip }}
 {% endif %}
 **Role:** {{ role | default('N/A') }}
-**Scanned:** {{ ansible_date_time.iso8601 }}
+**Scanned:** {{ ansible_facts.date_time.iso8601 }}
 
 ---
 
@@ -13,11 +13,11 @@
 
 | Property | Value |
 |----------|-------|
-| Hostname | {{ ansible_hostname }} |
-| OS | {{ os_pretty_name | default(ansible_distribution ~ ' ' ~ ansible_distribution_version) }} |
-| Kernel | {{ ansible_kernel }} |
-| Architecture | {{ ansible_architecture }} |
-| Uptime | {{ ansible_uptime_seconds | int // 86400 }} days, {{ (ansible_uptime_seconds | int % 86400) // 3600 }} hours |
+| Hostname | {{ ansible_facts.hostname }} |
+| OS | {{ os_pretty_name | default(ansible_facts.distribution ~ ' ' ~ ansible_facts.distribution_version) }} |
+| Kernel | {{ ansible_facts.kernel }} |
+| Architecture | {{ ansible_facts.architecture }} |
+| Uptime | {{ ansible_facts.uptime_seconds | int // 86400 }} days, {{ (ansible_facts.uptime_seconds | int % 86400) // 3600 }} hours |
 
 ---
 
@@ -27,17 +27,17 @@
 
 | Property | Value |
 |----------|-------|
-| Model | {{ ansible_processor[2] | default('N/A') }} |
-| Cores | {{ ansible_processor_vcpus }} |
+| Model | {{ ansible_facts.processor[2] | default('N/A') }} |
+| Cores | {{ ansible_facts.processor_vcpus }} |
 | Load (1/5/15 min) | {{ load_avg }} |
 
 ### Memory
 
 | Property | Value |
 |----------|-------|
-| Total | {{ ansible_memtotal_mb }} MB |
+| Total | {{ ansible_facts.memtotal_mb }} MB |
 | Used | {{ mem_used_mb }} MB ({{ mem_pct }}%) |
-| Available | {{ ansible_memfree_mb }} MB |
+| Available | {{ ansible_facts.memfree_mb }} MB |
 
 ### Disk Usage
 

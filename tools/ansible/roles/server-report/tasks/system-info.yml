@@ -23,8 +23,8 @@
 
 - name: Calculate memory percentage
   ansible.builtin.set_fact:
-    mem_used_mb: "{{ ansible_memtotal_mb - ansible_memfree_mb }}"
-    mem_pct: "{{ ((ansible_memtotal_mb - ansible_memfree_mb) / ansible_memtotal_mb * 100) | round(1) }}"
+    mem_used_mb: "{{ ansible_facts.memtotal_mb - ansible_facts.memfree_mb }}"
+    mem_pct: "{{ ((ansible_facts.memtotal_mb - ansible_facts.memfree_mb) / ansible_facts.memtotal_mb * 100) | round(1) }}"
 
 - name: Get disk usage details
   ansible.builtin.shell: |

@@ -38,7 +38,7 @@
             "agg_window": "{{ stream.agg_window }}"{% endif %}{% if stream.agg_fields is defined %},
             "agg_fields": "{{ stream.agg_fields }}"{% endif %}{% if stream.agg_default is defined %},
             "agg_default": "{{ stream.agg_default }}"{% endif %},
-            "created_at": "{{ ansible_date_time.iso8601 }}"
+            "created_at": "{{ ansible_facts.date_time.iso8601 }}"
           }{{ "," if not loop.last else "" }}
       {% endfor %}
         ]

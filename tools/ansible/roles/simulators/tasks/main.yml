@@ -134,7 +134,7 @@
           {
             "id": "{{ simulators_tsstore_api_key[8:16] }}",
             "hash": "{{ simulators_api_key_hash }}",
-            "created_at": "{{ ansible_date_time.iso8601 }}",
+            "created_at": "{{ ansible_facts.date_time.iso8601 }}",
             "note": "Shared key via Ansible deploy"
           }
         ]
@@ -216,7 +216,7 @@
           {
             "id": "{{ simulators_tsstore_api_key[8:16] }}",
             "hash": "{{ simulators_api_key_hash }}",
-            "created_at": "{{ ansible_date_time.iso8601 }}",
+            "created_at": "{{ ansible_facts.date_time.iso8601 }}",
             "note": "Shared key via Ansible deploy"
           }
         ]

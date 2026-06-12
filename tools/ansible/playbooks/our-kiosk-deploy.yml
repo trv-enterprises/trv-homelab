@@ -23,7 +23,7 @@
   become: false
 
   vars:
-    kiosk_deploy_dir: "{{ ansible_env.HOME | default('/home/' + ansible_user) }}/voice-display"
+    kiosk_deploy_dir: "{{ ansible_facts.env.HOME | default('/home/' + ansible_user) }}/voice-display"
     kiosk_home: "/home/{{ ansible_user }}"
     kiosk_src_dir: "{{ playbook_dir }}/../../../../trv-kiosk"
     kiosk_port: 5174
