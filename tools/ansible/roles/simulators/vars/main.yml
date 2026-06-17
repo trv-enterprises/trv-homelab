@@ -21,7 +21,7 @@ simulators_tsstore_stores:
 # per sensor reading, with location/sensor as dimension FIELDS rather than a
 # store-per-location. This is a SCHEMA store — its field set is fixed at
 # creation and must exactly match what the writer emits (see
-# dashboard/simulators/sensor-readings-writer/main.go SensorReading struct).
+# trv-outpost-sim sensor-readings-writer/main.go SensorReading struct).
 # A schema store rejects any emitted field not declared here.
 simulators_tsstore_schema_stores:
   sensor-readings:

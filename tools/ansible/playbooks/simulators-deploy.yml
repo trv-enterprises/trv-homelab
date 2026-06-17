@@ -4,7 +4,7 @@
 # Deploys simulator services (ts-store, websocket, REST API, CSV server,
 # data-writer, postgres) to the simulators LXD container.
 #
-# Source code synced from: dashboard/simulators/
+# Source code synced from: ../trv-outpost-sim (trv-enterprises/trv-outpost-sim)
 # Secrets loaded from Ansible Vault (group_vars/all/vault.yml)
 #
 # Deploy:
