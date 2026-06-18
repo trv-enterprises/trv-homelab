@@ -38,3 +38,9 @@ api_generate_ms: 5000
 sensor_readings_interval_ms: 1000
 sensor_readings_noise: "true"
 sensor_readings_anomaly_rate: "0.002"
+
+# Traffic-writer behavior (AWS-honeypot replay → WS stream + traffic-flows
+# schema store). Host port is fixed at 21084 in the compose file (21084:8085).
+traffic_events_per_sec: 50
+traffic_store_name: "traffic-flows"
+traffic_agg_write_sec: 60
