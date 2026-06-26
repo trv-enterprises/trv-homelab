@@ -44,3 +44,9 @@ sensor_readings_anomaly_rate: "0.002"
 traffic_events_per_sec: 50
 traffic_store_name: "traffic-flows"
 traffic_agg_write_sec: 60
+
+# Counter-writer behavior (raw monotonic counters → counters schema store, a
+# test source for the dashboard's accumulator/delta transform). Control HTTP
+# host port is fixed at 21085 in the compose file (21085:8086).
+counter_store_name: "counters"
+counter_interval_ms: 1000

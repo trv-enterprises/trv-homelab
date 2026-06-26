@@ -52,3 +52,22 @@ simulators_tsstore_schema_stores:
         - {index: 7, name: "dst_lat", type: "float64"}
         - {index: 8, name: "dst_lon", type: "float64"}
         - {index: 9, name: "count", type: "int64"}
+
+  # Counters store the counter-writer publishes RAW MONOTONIC totals to — a
+  # test source for the Outpost dashboard's accumulator/delta transform
+  # (data_mapping.accumulator_columns + accumulator_reset_policy). Every column
+  # is a cumulative int64 the dashboard subtracts to recover a per-interval
+  # delta; the writer fires resets/wraps/spikes/gaps on a schedule and on demand
+  # (POST :21085/trigger) to exercise each reset policy. SCHEMA store.
+  # Field list copied verbatim from trv-outpost-sim counter-writer/schema.go
+  # — keep in sync with that file (its /schema endpoint is the source of truth).
+  counters:
+    schema:
+      fields:
+        - {index: 1, name: "timestamp", type: "int64"}
+        - {index: 2, name: "bytes_total", type: "int64"}
+        - {index: 3, name: "packets_total", type: "int64"}
+        - {index: 4, name: "requests_total", type: "int64"}
+        - {index: 5, name: "errors_total", type: "int64"}
+        - {index: 6, name: "energy_wh", type: "int64"}
+        - {index: 7, name: "frames_total", type: "int64"}
