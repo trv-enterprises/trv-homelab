@@ -22,7 +22,10 @@
   vars:
     kiosk_user: <user>
     kiosk_deploy_dir: "/home/{{ kiosk_user }}/voice-display"
-    kiosk_src_dir: "{{ playbook_dir }}/../../../devices/our-kiosk"
+    # Kiosk source lives in the standalone trv-kiosk repo (split out of
+    # devices/our-kiosk). Sibling checkout to trv-homelab; four levels up
+    # from tools/ansible/playbooks/ — matches our-kiosk-deploy.yml.
+    kiosk_src_dir: "{{ playbook_dir }}/../../../../trv-kiosk"
     node_major_version: "20"
 
   tasks:
