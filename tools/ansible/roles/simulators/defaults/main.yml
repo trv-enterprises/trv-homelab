@@ -2,12 +2,15 @@
 # Simulator defaults — overrideable in inventory/host_vars/<host>.yml.
 # (Role-internal constants live in vars/main.yml.)
 
-# ts-store image version. Pin to a release so deploys are reproducible;
-# bump intentionally when upgrading. Note: GHCR Docker tags strip the
-# leading 'v' from the GitHub release tag (release v0.6.1 publishes
-# image tag 0.6.1).
-tsstore_version: "0.6.1"
-tsstore_image: "ghcr.io/trv-enterprises/ts-store:{{ tsstore_version }}"
+# ts-store image version. EMPTY = "resolve the latest release at deploy time"
+# (the role queries GitHub via gh and uses the newest tag). Set a concrete
+# value here / in host_vars / via -e to PIN a version for reproducibility.
+# There is deliberately no stale numeric fallback — an un-pinned deploy tracks
+# the current release. Note: GHCR Docker tags strip the leading 'v' from the
+# GitHub release tag (release v0.17.0 publishes image tag 0.17.0), so the role
+# strips it when building tsstore_image.
+tsstore_version: ""
+tsstore_image: "ghcr.io/trv-enterprises/ts-store:{{ tsstore_version | regex_replace('^v', '') }}"
 
 # Local source path (synced to remote). Assumes trv-homelab and
 # trv-outpost-sim are sibling repos under the same parent. (Split out of

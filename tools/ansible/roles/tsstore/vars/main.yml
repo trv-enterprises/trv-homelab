@@ -86,3 +86,70 @@ tsstore_collector_store_specs:
   journal-logs:
     type: json
     blocks: 10000
+
+  # docker-stats collector stores (ts-store examples/docker-stats). The
+  # collector runs on a Docker host and writes to a ts-store — either
+  # REMOTELY over HTTP (LXCs on trv-srv-002 → the srv-002 store, via that
+  # host's tsstore_server_stores) or LOCALLY via socket (hosts that run their
+  # own ts-store, e.g. simulators / trv-srv-001).
+  #
+  # Naming convention: <docker-host>-docker-containers / <docker-host>-docker-daemon
+  # so multiple Docker hosts can share one ts-store, separated by store name
+  # (per the docker-stats README). <docker-host> is the inventory hostname.
+  #
+  # Every docker host uses the SAME two schemas (the metric set is fixed;
+  # adding/removing a CONTAINER needs no schema change — a new container just
+  # appears as new rows with a new `container` value). To avoid repeating the
+  # field lists per host, the two schemas are defined ONCE as YAML anchors
+  # (&docker_containers_schema / &docker_daemon_schema) and aliased per host.
+  # Schemas are verbatim from the docker-stats README.
+  dashboard-docker-containers: &docker_containers_spec
+    type: schema
+    blocks: 20000
+    schema:
+      fields:
+        - {index: 1,  name: "container",         type: "string"}
+        - {index: 2,  name: "image",             type: "string"}
+        - {index: 3,  name: "state",             type: "string"}
+        - {index: 4,  name: "cpu.pct",           type: "float64"}
+        - {index: 5,  name: "mem.used",          type: "int64"}
+        - {index: 6,  name: "mem.limit",         type: "int64"}
+        - {index: 7,  name: "mem.pct",           type: "float64"}
+        - {index: 8,  name: "net.rx_bytes",      type: "int64"}
+        - {index: 9,  name: "net.tx_bytes",      type: "int64"}
+        - {index: 10, name: "blkio.read_bytes",  type: "int64"}
+        - {index: 11, name: "blkio.write_bytes", type: "int64"}
+        - {index: 12, name: "pids",              type: "int32"}
+  dashboard-docker-daemon: &docker_daemon_spec
+    type: schema
+    blocks: 2000
+    schema:
+      fields:
+        - {index: 1, name: "containers.running", type: "int32"}
+        - {index: 2, name: "containers.paused",  type: "int32"}
+        - {index: 3, name: "containers.stopped", type: "int32"}
+        - {index: 4, name: "containers.total",   type: "int32"}
+        - {index: 5, name: "images.total",       type: "int32"}
+        - {index: 6, name: "df.layers_size",     type: "int64"}
+        - {index: 7, name: "df.images_size",     type: "int64"}
+        - {index: 8, name: "df.containers_size", type: "int64"}
+        - {index: 9, name: "df.volumes_size",    type: "int64"}
+
+  # Additional Docker hosts — same two schemas, aliased from the anchors above.
+  # Remote-write (→ trv-srv-002 store over HTTP): services, nvr, photos,
+  # dashboard-preprod. Local-write (own ts-store via socket): simulators,
+  # trv-srv-001. A host's store pair is only created where it's listed in
+  # tsstore_server_stores (remote target) or tsstore_collectors-adjacent
+  # local config; defining the spec here is harmless for hosts that don't use it.
+  services-docker-containers: *docker_containers_spec
+  services-docker-daemon: *docker_daemon_spec
+  nvr-docker-containers: *docker_containers_spec
+  nvr-docker-daemon: *docker_daemon_spec
+  photos-docker-containers: *docker_containers_spec
+  photos-docker-daemon: *docker_daemon_spec
+  dashboard-preprod-docker-containers: *docker_containers_spec
+  dashboard-preprod-docker-daemon: *docker_daemon_spec
+  simulators-docker-containers: *docker_containers_spec
+  simulators-docker-daemon: *docker_daemon_spec
+  trv-srv-001-docker-containers: *docker_containers_spec
+  trv-srv-001-docker-daemon: *docker_daemon_spec

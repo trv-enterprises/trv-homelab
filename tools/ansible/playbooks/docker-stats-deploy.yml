@@ -1,0 +1,52 @@
+---
+# docker-stats Collector Deployment Playbook
+#
+# Deploys the ts-store docker-stats collector onto Docker hosts. The collector
+# reads the local Docker socket and writes container + daemon stats to a
+# ts-store — either REMOTELY over HTTP (LXCs on trv-srv-002 → the srv-002
+# store) or LOCALLY via socket (hosts running their own ts-store). The target
+# stores must already exist:
+#   - remote-write hosts: created on trv-srv-002 via tsstore_server_stores
+#     (run `tsstore-deploy.yml --limit trv-srv-002` first).
+#   - local-write hosts: created on that host via its own tsstore config.
+#
+# The binary is built locally from ../../../../ts-store/examples/docker-stats
+# (requires a Go toolchain on the control node) and pushed — not a release asset.
+#
+# Per-host config lives in host_vars/<docker-host>.yml as docker_stats_*:
+#   docker_stats_http            ts-store URL (http://192.168.1.12:21080 remote,
+#                                or http://localhost:21080 for a local ts-store)
+#   docker_stats_container_store / _daemon_store   store names (<host>-docker-*)
+#   docker_stats_container_key   / _daemon_key     vault refs
+# (docker_stats_container_interval / _daemon_interval optional; sized per host.)
+#
+# Usage:
+#   ansible-playbook playbooks/docker-stats-deploy.yml                 # whole group
+#   ansible-playbook playbooks/docker-stats-deploy.yml --limit services
+#   ansible-playbook playbooks/docker-stats-deploy.yml -e docker_stats_target=nvr
+#
+# The default target is the `docker_hosts` inventory group; override with
+# --limit or -e docker_stats_target=<host>.
+
+- name: Deploy docker-stats collector
+  hosts: "{{ docker_stats_target | default('docker_hosts') }}"
+  become: false
+
+  tasks:
+    - name: Ensure docker-stats config is present for this host
+      ansible.builtin.assert:
+        that:
+          - (docker_stats_http is defined) or (docker_stats_socket is defined)
+          - docker_stats_container_store is defined
+          - docker_stats_daemon_store is defined
+          - docker_stats_container_key is defined
+          - docker_stats_daemon_key is defined
+        fail_msg: >-
+          {{ inventory_hostname }} is missing docker_stats_* vars. Add them to
+          host_vars/{{ inventory_hostname }}.yml (see playbook header). Need a
+          ts-store target (docker_stats_http OR docker_stats_socket).
+
+    - name: Run docker-stats collector role tasks
+      ansible.builtin.include_role:
+        name: tsstore
+        tasks_from: docker-stats.yml

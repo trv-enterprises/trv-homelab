@@ -30,6 +30,42 @@
   loop: "{{ tsstore_collectors }}"
   when: item.name not in tsstore_known_collectors
 
+# Version resolution. If tsstore_version is empty (the default), resolve the
+# LATEST ts-store release at deploy time via the gh CLI on the control node —
+# an un-pinned deploy always tracks current, never a stale hardcoded fallback.
+# A concrete tsstore_version (defaults/host_vars/-e/TSSTORE_VERSION) pins and
+# skips the lookup entirely.
+- name: Note whether the version was pinned (before any auto-resolve)
+  ansible.builtin.set_fact:
+    tsstore_version_pinned: "{{ (tsstore_version | default('') | length) > 0 }}"
+
+- name: Resolve latest ts-store release (only when version not pinned)
+  ansible.builtin.command:
+    cmd: gh release view --repo trv-enterprises/ts-store --json tagName --jq .tagName
+  delegate_to: localhost
+  run_once: true
+  # Read-only lookup — must run even in --check so the resolved version is
+  # available to the (checked) download tasks; otherwise check runs report an
+  # empty version.
+  check_mode: false
+  register: tsstore_latest_lookup
+  changed_when: false
+  failed_when: >-
+    tsstore_latest_lookup.rc != 0 or
+    (tsstore_latest_lookup.stdout | default('') | trim | length) == 0
+  when: not tsstore_version_pinned
+
+- name: Set tsstore_version to the resolved latest tag
+  ansible.builtin.set_fact:
+    tsstore_version: "{{ tsstore_latest_lookup.stdout | trim }}"
+  when: not tsstore_version_pinned
+
+- name: Report the ts-store version being deployed
+  ansible.builtin.debug:
+    msg: >-
+      Deploying ts-store {{ tsstore_version }}
+      {{ '(pinned)' if tsstore_version_pinned else '(latest, auto-resolved)' }}
+
 - name: Determine architecture suffix
   ansible.builtin.set_fact:
     tsstore_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
@@ -143,10 +179,24 @@
     tsstore_effective_store_specs: >-
       {{ tsstore_collector_store_specs | combine(tsstore_store_specs, recursive=True) }}
 
+# The full set of stores this host must create/key/schema is the union of:
+#   - stores backed by a LOCAL collector (tsstore_collectors), and
+#   - SERVER-SIDE stores written to remotely (tsstore_server_stores),
+# each normalised to {name: <store>} so the downstream loops are uniform.
+# Pure-Jinja (no external collection): wrap each unique name in a {name: ...}
+# dict so downstream loops keep using item.name unchanged.
+- name: Build the full managed-store list (collectors + server-side stores)
+  ansible.builtin.set_fact:
+    tsstore_managed_stores: >-
+      {{ (tsstore_collectors | map(attribute='name') | list
+          + tsstore_server_stores) | unique
+         | map('regex_replace', '^(.*)$', '{"name": "\1"}')
+         | map('from_json') | list }}
+
 - name: Check which stores already exist (meta.tsdb present)
   ansible.builtin.stat:
     path: "{{ tsstore_data_dir }}/{{ item.name }}/meta.tsdb"
-  loop: "{{ tsstore_collectors }}"
+  loop: "{{ tsstore_managed_stores }}"
   loop_control:
     label: "{{ item.name }}"
   register: tsstore_meta_stat

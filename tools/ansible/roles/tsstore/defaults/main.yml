@@ -6,7 +6,13 @@
 
 # Release version. Must match a tag in trv-enterprises/ts-store with
 # release assets named <binary>-<version>-linux-<arch>.
-tsstore_version: "v0.6.8"
+#
+# EMPTY = "resolve the latest release at deploy time" (the role queries
+# GitHub via the gh CLI and uses the newest tag, e.g. v0.17.0). Set a concrete
+# value here, in host_vars, or via -e/TSSTORE_VERSION to PIN a version instead.
+# There is deliberately no stale numeric fallback — an un-pinned deploy always
+# tracks the current release rather than a hardcoded old one.
+tsstore_version: ""
 
 # Collectors to enable (override per host).
 # Only Go collectors shipped in the ts-store release are supported here.
@@ -28,6 +34,18 @@ tsstore_mqtt_streams: []
 # The role preserves these across re-deploys via SHA-256 of the key in keys.json.
 tsstore_store_api_keys: {}
 
+# Server-side stores that have NO local collector on this ts-store host —
+# they are written to REMOTELY (e.g. the docker-stats collector on LXC 100
+# writes to dashboard-docker-* on trv-srv-002 over HTTP). List store names
+# here to have the role create them, seed keys.json, and apply their schema,
+# exactly as it does for collector-backed stores. Each name must have a spec
+# in tsstore_collector_store_specs (vars/main.yml) and an API key in
+# tsstore_store_api_keys. Example (in host_vars):
+#   tsstore_server_stores:
+#     - dashboard-docker-containers
+#     - dashboard-docker-daemon
+tsstore_server_stores: []
+
 # Per-store creation overrides, keyed by store name. Merged over the
 # role's tsstore_collector_store_specs (vars/main.yml) so a host can
 # override type/blocks/schema for a store without editing the role.
@@ -35,3 +53,17 @@ tsstore_store_api_keys: {}
 #   tsstore_store_specs:
 #     system-stats: {type: json, blocks: 20000}
 tsstore_store_specs: {}
+
+# ── docker-stats collector (tasks/docker-stats.yml) ────────────────────────
+# Deployed on a Docker host via playbooks/docker-stats-deploy.yml; writes to a
+# remote ts-store over HTTP. These are only consumed when that task file runs.
+docker_stats_user: docker-stats
+docker_stats_bin: /usr/local/bin/docker-stats
+# Where the ts-store repo's examples/docker-stats source lives on the control
+# node, and where the locally-built binary is dropped.
+docker_stats_src_dir: "{{ playbook_dir }}/../../../../ts-store/examples/docker-stats"
+docker_stats_build_dir: "{{ playbook_dir }}/../../../../ts-store/examples/docker-stats"
+docker_stats_container_interval: 20
+docker_stats_daemon_interval: 120
+# docker_stats_http / _container_store / _daemon_store / _container_key /
+# _daemon_key have no safe defaults — the playbook or host_vars must set them.

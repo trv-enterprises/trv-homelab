@@ -14,6 +14,38 @@
     msg: "ghcr_token is required for pulling from GitHub Container Registry."
   when: ghcr_token is not defined or ghcr_token == ""
 
+# Version resolution. Empty tsstore_version (the default) => resolve the LATEST
+# ts-store release via the gh CLI on the control node, so an un-pinned deploy
+# tracks current instead of a stale hardcoded tag. A concrete value pins and
+# skips the lookup. tsstore_image strips any leading 'v' (GHCR tag convention).
+- name: Note whether the simulators ts-store version was pinned
+  ansible.builtin.set_fact:
+    tsstore_version_pinned: "{{ (tsstore_version | default('') | length) > 0 }}"
+
+- name: Resolve latest ts-store release (only when version not pinned)
+  ansible.builtin.command:
+    cmd: gh release view --repo trv-enterprises/ts-store --json tagName --jq .tagName
+  delegate_to: localhost
+  run_once: true
+  check_mode: false
+  register: sim_tsstore_latest
+  changed_when: false
+  failed_when: >-
+    sim_tsstore_latest.rc != 0 or
+    (sim_tsstore_latest.stdout | default('') | trim | length) == 0
+  when: not tsstore_version_pinned
+
+- name: Set tsstore_version to the resolved latest tag
+  ansible.builtin.set_fact:
+    tsstore_version: "{{ sim_tsstore_latest.stdout | trim }}"
+  when: not tsstore_version_pinned
+
+- name: Report the simulators ts-store version being deployed
+  ansible.builtin.debug:
+    msg: >-
+      Deploying simulators ts-store image {{ tsstore_image }}
+      {{ '(pinned)' if tsstore_version_pinned else '(latest, auto-resolved)' }}
+
 - name: Login to GitHub Container Registry
   ansible.builtin.shell:
     cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u trv-enterprises --password-stdin

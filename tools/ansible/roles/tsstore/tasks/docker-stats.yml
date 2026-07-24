@@ -1,0 +1,137 @@
+---
+# docker-stats collector deployment.
+#
+# Runs on a DOCKER host (e.g. the dashboard LXC 100) and writes container +
+# daemon stats over HTTP to a REMOTE ts-store (e.g. trv-srv-002). This is a
+# collector-only deployment: the host has NO local ts-store. The two target
+# stores are created/keyed/schema'd by the tsstore role on the ts-store server
+# (via tsstore_server_stores) — NOT here.
+#
+# The binary lives in the ts-store repo under examples/docker-stats and is NOT
+# a release asset, so we build it locally and push it (like the kiosk deploy
+# builds the display app locally). Requires a Go toolchain on the control node.
+#
+# Required vars (set by the docker-stats-deploy.yml playbook / host_vars):
+#   docker_stats_http             ts-store HTTP URL (e.g. http://192.168.1.12:21080)
+#   docker_stats_container_store  remote store name for per-container rows
+#   docker_stats_daemon_store     remote store name for daemon-wide rows
+#   docker_stats_container_key    API key for the container store (vault ref)
+#   docker_stats_daemon_key       API key for the daemon store (vault ref)
+# Optional: docker_stats_container_interval (20), docker_stats_daemon_interval (120)
+
+- name: Validate docker-stats keys are configured
+  ansible.builtin.assert:
+    that:
+      - docker_stats_container_key is defined and (docker_stats_container_key | length) > 0
+      - docker_stats_daemon_key is defined and (docker_stats_daemon_key | length) > 0
+    fail_msg: >-
+      docker-stats requires docker_stats_container_key and docker_stats_daemon_key.
+      Add the vault refs (see host_vars) — the collector cannot write without them.
+
+- name: Validate docker-stats has a ts-store target (http or socket)
+  ansible.builtin.assert:
+    that:
+      - (docker_stats_http is defined and (docker_stats_http | length) > 0) or
+        (docker_stats_socket is defined and (docker_stats_socket | length) > 0)
+    fail_msg: >-
+      docker-stats needs either docker_stats_http (remote) or docker_stats_socket
+      (local ts-store on the same host).
+
+# For socket-mode (local ts-store), the collector must be able to read the
+# ts-store socket, which is owned by the tsstore group. Add that group too.
+- name: Add docker-stats user to tsstore group (socket mode)
+  ansible.builtin.user:
+    name: "{{ docker_stats_user }}"
+    groups: "{{ tsstore_group }}"
+    append: true
+  become: true
+  when: docker_stats_socket is defined and (docker_stats_socket | length) > 0
+
+- name: Detect control-node Go toolchain
+  ansible.builtin.command: go version
+  delegate_to: localhost
+  run_once: true
+  register: docker_stats_go
+  changed_when: false
+  failed_when: docker_stats_go.rc != 0
+
+- name: Determine target architecture suffix
+  ansible.builtin.set_fact:
+    docker_stats_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+
+# Build the static binary for the target arch on the control node.
+- name: Build docker-stats binary locally
+  ansible.builtin.command:
+    cmd: >-
+      go build -ldflags=-w -ldflags=-s
+      -o {{ docker_stats_build_dir }}/docker-stats-linux-{{ docker_stats_arch }} .
+    chdir: "{{ docker_stats_src_dir }}"
+  environment:
+    GOOS: linux
+    GOARCH: "{{ docker_stats_arch }}"
+    CGO_ENABLED: "0"
+  delegate_to: localhost
+  run_once: true
+  changed_when: true
+
+- name: Create docker-stats service user
+  ansible.builtin.user:
+    name: "{{ docker_stats_user }}"
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+    groups: docker
+    append: true
+  become: true
+
+- name: Create tsstore config dir (for the env file)
+  ansible.builtin.file:
+    path: "{{ tsstore_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Install docker-stats binary
+  ansible.builtin.copy:
+    src: "{{ docker_stats_build_dir }}/docker-stats-linux-{{ docker_stats_arch }}"
+    dest: "{{ docker_stats_bin }}"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  notify: Restart docker-stats
+
+- name: Create docker-stats environment file (two API keys)
+  ansible.builtin.copy:
+    content: |
+      TSSTORE_CONTAINER_KEY={{ docker_stats_container_key }}
+      TSSTORE_DAEMON_KEY={{ docker_stats_daemon_key }}
+    dest: "{{ tsstore_config_dir }}/docker-stats.env"
+    owner: root
+    group: "{{ docker_stats_user }}"
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart docker-stats
+
+- name: Create docker-stats systemd service
+  ansible.builtin.template:
+    src: docker-stats.service.j2
+    dest: /etc/systemd/system/docker-stats.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart docker-stats
+
+- name: Enable and start docker-stats
+  ansible.builtin.systemd:
+    name: docker-stats
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

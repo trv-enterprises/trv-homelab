@@ -1,7 +1,11 @@
 [Unit]
 Description=tsstore {{ item.name }} collector
 After=network.target tsstore.service
-Requires=tsstore.service
+# BindsTo: collector stops if tsstore stops or fails (strict; superset of Requires).
+# PartOf: a `systemctl restart/stop tsstore` propagates to the collector, so a DB
+# restart no longer silently leaves collectors dead.
+BindsTo=tsstore.service
+PartOf=tsstore.service
 
 [Service]
 Type=simple

@@ -23,3 +23,9 @@
     name: journal-logs
     state: restarted
   become: true
+
+- name: Restart docker-stats
+  ansible.builtin.systemd:
+    name: docker-stats
+    state: restarted
+  become: true

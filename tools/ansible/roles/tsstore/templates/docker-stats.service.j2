@@ -1,0 +1,43 @@
+[Unit]
+Description=docker-stats collector (ts-store) — writes to {{ docker_stats_socket if (docker_stats_socket is defined and docker_stats_socket | length > 0) else docker_stats_http }}
+Documentation=https://github.com/trv-enterprises/ts-store/tree/main/examples/docker-stats
+# The collector reads the LOCAL Docker socket and writes to a REMOTE ts-store
+# over HTTP, so it depends on docker (not a local tsstore.service — there is
+# none on this host). Unlike the socket-based collectors, no BindsTo/PartOf.
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+# Runs as the docker-stats user, which is in the docker group so it can read
+# /var/run/docker.sock (equivalent to root on the host — trusted local service).
+User={{ docker_stats_user }}
+SupplementaryGroups=docker{% if docker_stats_socket is defined and docker_stats_socket | length > 0 %} {{ tsstore_group }}{% endif %}
+
+EnvironmentFile={{ tsstore_config_dir }}/docker-stats.env
+# -http: write to the remote ts-store. Two independently-keyed stores.
+# -container-interval sized for this host: the collector uses Docker's
+# non-streaming stats endpoint (~1-2s per container), so keep the interval
+# comfortably above N_containers x ~1.5s. Default 20s handles well past a
+# dozen containers here.
+ExecStart={{ docker_stats_bin }} \
+{% if docker_stats_socket is defined and docker_stats_socket | length > 0 %}
+    -socket {{ docker_stats_socket }} \
+{% else %}
+    -http {{ docker_stats_http }} \
+{% endif %}
+    -container-store {{ docker_stats_container_store }} \
+    -daemon-store {{ docker_stats_daemon_store }} \
+    -container-interval {{ docker_stats_container_interval | default(20) }} \
+    -daemon-interval {{ docker_stats_daemon_interval | default(120) }}
+# Keys are supplied via the env file (TSSTORE_CONTAINER_KEY / TSSTORE_DAEMON_KEY)
+# so they never appear in the argv / `ps` output.
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
