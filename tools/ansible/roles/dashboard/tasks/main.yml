@@ -32,6 +32,63 @@
   changed_when: false
   no_log: true
 
+- name: Validate launcher source is configured
+  ansible.builtin.fail:
+    msg: >-
+      dashboard_launcher_enabled is true but dashboard_launcher_src is unset.
+      Point it at the launcher content in homelab-deploy, e.g.
+      dashboard_launcher_src: "{{ '{{ inventory_dir }}' }}/../files/dashboard-launcher"
+      (anchor on inventory_dir, not playbook_dir — the playbooks live in the
+      sibling trv-homelab checkout).
+  when:
+    - dashboard_launcher_enabled | default(false)
+    - dashboard_launcher_src | default('') == ''
+  tags:
+    - launcher
+
+# The launcher hands identity to the app via ?user_id=, which the server only
+# honors when legacy GUID auth is on. Enabling the launcher without it would
+# deploy a page that silently fails to sign anyone in.
+- name: Validate launcher has a working auth channel
+  ansible.builtin.fail:
+    msg: >-
+      dashboard_launcher_enabled requires dashboard_auth_allow_legacy_guid to be
+      true — the launcher signs in via ?user_id=, which the server ignores when
+      legacy GUID auth is off. Enable it, or disable the launcher.
+  when:
+    - dashboard_launcher_enabled | default(false)
+    - (dashboard_auth_allow_legacy_guid | default('true')) | string | lower != 'true'
+  tags:
+    - launcher
+
+- name: Create launcher content directory
+  ansible.builtin.file:
+    path: "{{ dashboard_deploy_dir }}/launcher"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+  become: true
+  when: dashboard_launcher_enabled | default(false)
+  tags:
+    - launcher
+
+- name: Deploy launcher content
+  ansible.builtin.copy:
+    src: "{{ dashboard_launcher_src }}/{{ item }}"
+    dest: "{{ dashboard_deploy_dir }}/launcher/{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  loop:
+    - Caddyfile
+    - index.html
+    - users.json
+  register: launcher_content
+  when: dashboard_launcher_enabled | default(false)
+  tags:
+    - launcher
+
 - name: Deploy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -54,6 +111,25 @@
     chdir: "{{ dashboard_deploy_dir }}"
   register: compose_up
   changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+# Launcher content is bind-mounted, so `compose up -d` sees no config change
+# and leaves the running container with the old files. Restart explicitly when
+# the content actually changed.
+#
+# Uses `up -d launcher` rather than `restart`: on a content-only run
+# (--tags launcher) the compose-up task above is skipped, so the container may
+# not exist yet and `restart` would fail. `up -d` creates it if missing and is
+# a no-op restart otherwise.
+- name: Restart launcher when its content changed
+  ansible.builtin.command:
+    cmd: docker compose up -d --force-recreate launcher
+    chdir: "{{ dashboard_deploy_dir }}"
+  when:
+    - dashboard_launcher_enabled | default(false)
+    - launcher_content is changed
+  changed_when: true
+  tags:
+    - launcher
 
 - name: Wait for services to be healthy
   ansible.builtin.command:

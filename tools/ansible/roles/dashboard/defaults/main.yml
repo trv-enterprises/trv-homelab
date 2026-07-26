@@ -30,3 +30,24 @@ dashboard_enable_https: false
 # NOTE: do NOT use a bare-IP DOMAIN with HTTPS — the IP-SAN cert is rejected by
 # Chromium/Firefox at the handshake. Always a hostname.
 dashboard_caddy_tls_directive: ""
+
+# ---------------------------------------------------------------------------
+# Home-screen launcher sidecar (/launch)
+# ---------------------------------------------------------------------------
+# Serves a per-user PWA manifest so iOS "Add to Home Screen" pins an icon that
+# carries an identity. Needed because the dashboard's own manifest hardcodes
+# start_url:"/" and iOS gives an installed PWA a storage jar separate from
+# Safari's — so the dashboard's localStorage identity is invisible to the
+# installed app and every cold launch asks who you are.
+#
+# Requires legacy GUID auth (DASHBOARD_AUTH_ALLOW_LEGACY_GUID), since the
+# launcher hands identity to the app via ?user_id=. Deliberately off by
+# default: enable per-host in homelab-deploy inventory, and only on a
+# LAN/tailnet-only deployment. Anyone who can reach /launch can assume any
+# identity listed in its users.json.
+dashboard_launcher_enabled: false
+
+# Static content served at /launch, deployed from homelab-deploy:
+#   files/dashboard-launcher/{index.html,users.json,Caddyfile}
+dashboard_launcher_src: ""
+dashboard_launcher_image: "caddy:2-alpine"

@@ -11,7 +11,22 @@ services:
 {% endif %}
     environment:
       - DOMAIN={{ dashboard_domain }}
-{% if dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}
+{% if dashboard_launcher_enabled | default(false) %}
+      # Home-screen launcher route, injected into the client image's Caddyfile
+      # through the SAME {$CADDY_TLS_DIRECTIVE} placeholder used for TLS. That
+      # placeholder sits at the top of the site block, above every handle, and
+      # Caddy expands env placeholders verbatim before parsing — so a full
+      # `handle` block substitutes cleanly there. handle is first-match-wins,
+      # so /launch* is claimed here and everything else still falls through to
+      # the SPA fallback untouched.
+      #
+      # This is why the launcher needs NO change to the dashboard repo or its
+      # image: homelab-deploy owns the route and the content.
+      #
+      # When HTTPS is also on, the TLS directive is prepended to the same value
+      # (both are just Caddyfile text at the same nesting level).
+      - "CADDY_TLS_DIRECTIVE={% if dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}{{ dashboard_caddy_tls_directive | replace('\n', '\\n') }}\n{% endif %}handle /launch* {\n        reverse_proxy launcher:80\n    }"
+{% elif dashboard_enable_https | default(false) and dashboard_caddy_tls_directive | default('') %}
       # Env-gated TLS cert source (outpost-client >= 0.29.3 expands
       # {$CADDY_TLS_DIRECTIVE} in its Caddyfile). The value is emitted with REAL
       # newlines (\n in a double-quoted list item, which Compose turns into a
@@ -31,6 +46,10 @@ services:
     depends_on:
       server:
         condition: service_healthy
+{% if dashboard_launcher_enabled | default(false) %}
+      launcher:
+        condition: service_healthy
+{% endif %}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:2019/config/"]
@@ -88,6 +107,25 @@ services:
       timeout: 10s
       retries: 3
 
+{% if dashboard_launcher_enabled | default(false) %}
+  # Home-screen launcher (/launch) — content owned by homelab-deploy, NOT the
+  # dashboard repo. Not published on the host: only the dashboard's Caddy
+  # reaches it, over the compose network, via the injected /launch* route.
+  launcher:
+    image: {{ dashboard_launcher_image }}
+    volumes:
+      - {{ dashboard_deploy_dir }}/launcher/Caddyfile:/etc/caddy/Caddyfile:ro
+      - {{ dashboard_deploy_dir }}/launcher/index.html:/srv/index.html:ro
+      - {{ dashboard_deploy_dir }}/launcher/users.json:/srv/users.json:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/launch"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+{% endif %}
   mongodb:
     image: mongo:7
     ports:
