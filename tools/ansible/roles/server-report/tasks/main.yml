@@ -1,10 +1,6 @@
 ---
 # Main task orchestration for server-report role
 
-- name: Load app definitions
-  ansible.builtin.include_vars:
-    file: apps.yml
-
 - name: Gather system facts
   ansible.builtin.include_tasks: system-info.yml
 
