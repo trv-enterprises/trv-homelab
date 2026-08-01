@@ -1,0 +1,116 @@
+---
+# Synology SNMP OID -> ts-store field map for the synology-snmp collector.
+#
+# PROVENANCE: every entry cites where its definition came from.
+#   mib:  the checked-in 2022 vendor MIB (mibs/SYNOLOGY-*-MIB.txt) — authority
+#         for OID structure, type and units.
+#   pdf:  the 2025 MIB Guide extract (mibs/MIB-Guide-2025-extract.txt) —
+#         authority for enum ranges, which the 2022 MIB understates.
+#   live: observed on NAS-SYN-002 (DSM 7.3-86009) via snmpwalk 2026-08-01.
+# See mibs/README.md for why both sources are required.
+#
+# SHAPE: SNMP tables are flat OID columns, not nested arrays. A table walk
+# becomes TALL rows keyed by a discriminator (one row per disk per poll),
+# exactly like the docker-stats `container` field. Scalars become one WIDE
+# row per poll. ts-store schema stores hold flat typed fields only — there
+# are no embedded arrays anywhere in this design.
+#
+# ENUMS ARE OPEN. The `values` maps below are for read-time display only.
+# The collector writes the raw integer. An unseen integer is passed through
+# as-is, never rejected and never mapped to a placeholder.
+
+tables:
+  # ---------------------------------------------------------------- disks
+  disks:
+    store: nas-syn-002-disks
+    base_oid: .1.3.6.1.4.1.6574.2.1.1
+    discriminator: disk          # -> latest_by=disk / group_by=disk
+    source: mib SYNOLOGY-DISK-MIB.txt
+    columns:
+      - {col: 2,  field: disk,        type: string, note: "diskID, e.g. 'Disk 1'"}
+      - {col: 3,  field: model,       type: string}
+      - {col: 4,  field: disk_type,   type: string, note: "SATA / SSD"}
+      - {col: 5,  field: status,      type: int32,  enum: disk_status}
+      - {col: 6,  field: temp_c,      type: int32,  note: "Celsius — stated in MIB"}
+      - {col: 7,  field: role,        type: string, note: "data/hotspare/ssd_cache/none"}
+      - {col: 13, field: health,      type: int32,  enum: disk_health,
+         note: "DSM 7.1+. Verified populated over SNMP on 7.3 (all disks = 1), even though the DSM JSON API returns null for the equivalent health_status field — SNMP is the better source here."}
+
+  # -------------------------------------------------------------- volumes
+  volumes:
+    store: nas-syn-002-volumes
+    base_oid: .1.3.6.1.4.1.6574.3.1.1
+    discriminator: volume
+    source: mib SYNOLOGY-RAID-MIB.txt
+    columns:
+      - {col: 2, field: volume,       type: string, note: "raidName, e.g. 'Volume 1'"}
+      - {col: 3, field: status,       type: int32,  enum: raid_status}
+      - {col: 4, field: free_bytes,   type: int64,  note: "Counter64"}
+      - {col: 5, field: total_bytes,  type: int64,  note: "Counter64"}
+      - {col: 6, field: hotspare_cnt, type: int32}
+
+scalars:
+  # --------------------------------------------------------------- system
+  # One wide row per poll: system health, UPS, CPU and memory together.
+  system:
+    store: nas-syn-002-system
+    fields:
+      - {oid: .1.3.6.1.4.1.6574.1.1.0,    field: system_status,  type: int32, enum: common_status, source: mib SYNOLOGY-SYSTEM-MIB.txt}
+      - {oid: .1.3.6.1.4.1.6574.1.2.0,    field: temp_c,         type: int32, source: mib SYNOLOGY-SYSTEM-MIB.txt}
+      - {oid: .1.3.6.1.4.1.6574.1.3.0,    field: power_status,   type: int32, enum: common_status, source: mib}
+      - {oid: .1.3.6.1.4.1.6574.1.4.1.0,  field: fan_system,     type: int32, enum: common_status, source: mib}
+      - {oid: .1.3.6.1.4.1.6574.1.4.2.0,  field: fan_cpu,        type: int32, enum: common_status, source: mib}
+      - {oid: .1.3.6.1.4.1.6574.1.5.4.0,  field: upgrade_avail,  type: int32, source: mib}
+      # UPS — bonus coverage; pairs with the NUT shutdown chain.
+      - {oid: .1.3.6.1.4.1.6574.4.2.1.0,  field: ups_status,     type: string, source: "mib SYNOLOGY-UPS-MIB.txt (DisplayString, not an enum — e.g. 'OL')"}
+      - {oid: .1.3.6.1.4.1.6574.4.2.12.1.0, field: ups_load_pct,    type: float64, source: mib, note: "Float"}
+      - {oid: .1.3.6.1.4.1.6574.4.3.1.1.0,  field: ups_battery_pct, type: float64, source: mib, note: "Float"}
+      # Standard MIBs — not Synology-specific.
+      - {oid: .1.3.6.1.4.1.2021.10.1.5.1, field: load1,          type: float64, source: "UCD-SNMP-MIB laLoadInt (x100 int)"}
+      - {oid: .1.3.6.1.4.1.2021.10.1.5.2, field: load5,          type: float64, source: UCD-SNMP-MIB}
+      - {oid: .1.3.6.1.4.1.2021.10.1.5.3, field: load15,         type: float64, source: UCD-SNMP-MIB}
+      - {oid: .1.3.6.1.4.1.2021.4.5.0,    field: mem_total_kb,   type: int64,   source: UCD-SNMP-MIB}
+      - {oid: .1.3.6.1.4.1.2021.4.6.0,    field: mem_avail_kb,   type: int64,   source: UCD-SNMP-MIB}
+      - {oid: .1.3.6.1.4.1.2021.4.15.0,   field: mem_cached_kb,  type: int64,   source: UCD-SNMP-MIB}
+
+# ------------------------------------------------------------------ enums
+# Read-time display only. NOT exhaustive — see mibs/README.md.
+enums:
+  disk_status:               # source: mib + pdf (agree)
+    1: Normal
+    2: Initialized
+    3: NotInitialized
+    4: SystemPartitionFailed
+    5: Crashed
+
+  disk_health:               # source: pdf (DSM 7.1+); MIB declares 1..5 but
+    1: Normal                # documents only 1..4 — value 5 is reserved and
+    2: Warning               # undescribed in both sources.
+    3: Critical
+    4: Failing
+
+  raid_status:               # source: PDF ONLY beyond 12. The 2022 MIB caps
+    1: Normal                # at Integer32(1..12) and would treat 13-20 as
+    2: Repairing             # out-of-range. States 18/20 are SHR-specific and
+    3: Migrating             # THIS NAS RUNS SHR-2.
+    4: Expanding
+    5: Deleting
+    6: Creating
+    7: RaidSyncing
+    8: RaidParityChecking
+    9: RaidAssembling
+    10: Canceling
+    11: Degrade
+    12: Crashed
+    13: DataScrubbing
+    14: RaidDeploying
+    15: RaidUnDeploying
+    16: RaidMountCache
+    17: RaidUnmountCache
+    18: RaidExpandingUnfinishedSHR
+    19: RaidConvertSHRToPool
+    20: RaidMigrateSHR1ToSHR2
+
+  common_status:             # systemStatus / powerStatus / fan — source: mib.
+    1: Normal                # NOT cross-checked against the PDF; presume the
+    2: Failed                # same drift risk as raid_status.

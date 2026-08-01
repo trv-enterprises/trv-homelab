@@ -1,0 +1,2031 @@
+SNMP MIB Guide
+
+
+
+            Last updated: Mar 25, 2025
+Table of Contents
+Introduction                                              2
+Supported MIB files                                       3
+Synology MIB files                                        6
+Synology System MIB (OID: .1.3.6.1.4.1.6574.1)            7
+Synology Disk MIB (OID: .1.3.6.1.4.1.6574.2)              8
+Synology RAID MIB (OID: .1.3.6.1.4.1.6574.3)             11
+Synology UPS MIB (OID: .1.3.6.1.4.1.6574.4)              13
+Synology Smart MIB (OID: .1.3.6.1.4.1.6574.5)            14
+Synology Services MIB (OID: .1.3.6.1.4.1.6574.6)         15
+Synology StorageIO MIB (OID: .1.3.6.1.4.1.6574.101)      15
+Synology SpaceIO MIB (OID: .1.3.6.1.4.1.6574.102)        17
+Synology FlashCache MIB (OID: .1.3.6.1.4.1.6574.103)     18
+Synology iSCSI LUN MIB (OID: .1.3.6.1.4.1.6574.104)      20
+Synology Ebox MIB (OID: .1.3.6.1.4.1.6574.105)           22
+Synology SHA MIB (OID: .1.3.6.1.4.1.6574.106)            23
+Synology NFS MIB (OID: .1.3.6.1.4.1.6574.107)            25
+Synology GPUInfo MIB (OID: .1.3.6.1.4.1.6574.108)        26
+Synology Port MIB (OID: .1.3.6.1.4.1.6574.109)           27
+Synology iSCSI Target MIB (OID: .1.3.6.1.4.1.6574.110)   28
+Synology SMB Service MIB (OID: .1.3.6.1.4.1.6574.111)    29
+Synology MailPlus MIB (OID: .1.3.6.1.4.1.6574.201)       36
+Useful OIDs                                              41
+Monitor Specific OIDs                                    45
+Import MIB Files                                         45
+Set up the NMS                                           47
+Document Revision History                                49
+Copyright and Disclaimer Notices                         50
+
+
+
+
+1
+Introduction
+Synology's operating systems, including DiskStation Manager (DSM), Synology Router Manager
+(SRM), and ActiveProtect Manager (APM), allow users to monitor the status of their Synology
+servers through Network Management Systems (NMS) via Simple Network Management Protocol
+(SNMP). However, Synology DSM does not provide SNMP trap capability.
+This document introduces Management Information Base (MIB) files of Synology servers. It
+focuses on which MIB files are supported by Synology's operating systems, while also describes
+how Object Identifiers (OIDs) in Synology MIBs are used with your preferred NMS software. Users
+are encouraged to have experience and knowledge of NMS and SNMP before consulting this
+document.
+
+
+
+
+2
+Supported MIB files
+DSM, SRM, and APM support numerous MIB files that can help users monitor different information
+on their Synology NAS/IP SAN (hereinafter referred to as Synology servers). Table 2-1 shows the
+MIBs supported by DSM and SRM.
+These MIB files can be separated into two types: general SNMP MIB and Synology MIB. General
+SNMP MIB files are equipped on NMS clients natively.
+Synology MIB files can provide specific data about a Synology server system, disks, RAID, and
+connected UPS devices. Please see the “Synology MIB Files” section below for more Synology
+MIB information.
+You can download the Synology MIB file here.
+
+        Notes:
+        For all tables in this document, unless otherwise noted, DSM denotes that this OID is
+        compatible with DSM 6.2.4 and above, and DSM UC denotes that this OID is compatible
+        with DSM UC 3.0.
+
+Table 2-1 General MIB Files Supported by DSM
+              MIB                                          Explanation
+                             For defining event triggers and actions for network management
+    DISMAN-EVENT-MIB
+                             purposes
+    DISMAN-SCHEDULE-         For scheduling SNMP set operations periodically or at specific points
+    MIB                      in time
+    HOST-RESOURCES-MI
+    B
+                             For use in managing host systems
+    IF-MIB                   For describing network interface sub-layers
+    IP-FORWARD-MIB           For the management of CIDR multipath IP Routes
+    IP-MIB                   For IP and ICMP management objects
+    IPV6-ICMP-MIB            For entities implementing the ICMPv6
+    IPV6-MIB                 For entities implementing the IPv6 protocol
+    IPV6-TCP-MIB             For entities implementing TCP over IPv6
+
+3
+    IPV6-UDP-MIB         For entities implementing UDP over IPv6
+    NET-SNMP-AGENT-MI
+    B
+                         For monitoring structures for the Net-SNMP agent
+    NET-SNMP-EXTEND-
+    MIB
+                         For scripted extensions for the Net-SNMP agent
+    NET-SNMP-VACM-MI
+    B
+                         Defines Net-SNMP extensions to the standard VACM view table
+    NOTIFICATION-LOG-
+    MIB
+                         For logging SNMP Notifications
+    SNMP-COMMUNITY-      To help support coexistence between SNMPv1, SNMPv2c, and
+    MIB                  SNMPv3
+    SNMP-FRAMEWORK-
+    MIB
+                         The SNMP Management Architecture MIB
+    SNMP-MPD-MIB         For Message Processing and Dispatching
+    SNMP-USER-BASED-S
+    M-MIB
+                         For the SNMP User-based Security Model
+    SNMP-VIEW-BASED-A
+    CM-MIB
+                         For the View-based Access Control Model for SNMP
+    SNMPv2-MIB           For SNMP entities
+    SYNOLOGY-DISK-MIB    For Synology disk information (Synology only)
+    SYNOLOGY-EBOX-MI
+    B
+                         For Synology ebox information (Synology only)
+    SYNOLOGY-FLASHCA
+    CHE-MIB
+                         For Synology FlashCache information (Synology only)
+    SYNOLOGY-GPUINFO
+    -MIB
+                         For Synology GpuIO information (Synology only)
+    SYNOLOGY-ISCSILUN
+    -MIB
+                         For Synology iSCSI LUN information (Synology only)
+    SYNOLOGY-ISCSITarg
+    et-MIB
+                         For Synology iSCSI Target information (Synology only)
+    SYNOLOGY-NFS-MIB     For Synology NFS information (Synology only)
+
+
+4
+    SYNOLOGY-PORT-MI
+    B.txt
+                        For Synology Ethernet Port information (Synology only)
+    SYNOLOGY-RAID-MIB   For Synology RAID information (Synology only)
+    SYNOLOGY-SERVICES
+    -MIB
+                        For Synology services information (Synology only)
+    SYNOLOGY-SHA-MIB    For Synology High-Availability information (Synology only)
+    SYNOLOGY-SMART-M
+    IB
+                        For Synology smart information (Synology only)
+    SYNOLOGY-SPACEIO-
+    MIB
+                        For Synology SpaceIO information (Synology only)
+    SYNOLOGY-STORAGE
+    IO-MIB
+                        For Synology StorageIO information (Synology only)
+    SYNOLOGY-SYSTEM-
+    MIB
+                        For Synology system information (Synology only)
+    SYNOLOGY-UPS-MIB    For Synology UPS information (Synology only)
+    SYNOLOGY-MAILPLU
+    S-MIB
+                        For Synology MailPlus Server information (Synology only)
+    TCP-MIB             For managing TCP implementations
+    UCD-DISKIO-MIB      For disk IO statistics
+    UCD-DLMOD-MIB       For dynamic loadable MIB modules
+    UCD-SNMP-MIB        For private UCD SNMP MIB extensions
+    UDP-MIB             For managing UDP implementations
+    SYNOLOGY-SMB-MIB    For Synology SMB information (Synology only)
+
+
+
+
+5
+Synology MIB files
+The following Synology MIB files are provided in DSM and APM. These MIB files are the child-
+nodes of OID (Object Identifier) 1.3.6.1.4.1.6574. Table 3-1 shows the exact OID of each MIB.
+Please note that the MIB files are mutually dependent. Before your NMS can monitor any of the
+items in these MIB files, please make sure that all of them have been imported together and use
+SNMPv2c to obtain the complete Synology OID information.
+
+Table 3-1 OID of Synology MIBs
+              OID                  Name                   File Name       Last updated
+                                                                            version
+    .1.3.6.1.4.1.6574.1                           SYNOLOGY-SYSTEM-      DSM 7.2, APM
+                            synoSystem
+                                                  MIB.txt               1.0
+    .1.3.6.1.4.1.6574.2     synoDisk              SYNOLOGY-DISK-MIB.txt DSM 7.1, APM 1.0
+    .1.3.6.1.4.1.6574.3     synoRaid              SYNOLOGY-RAID-MIB.txt DSM
+                                                                        1.0
+                                                                             7.0, APM
+
+    .1.3.6.1.4.1.6574.4     synoUPS               SYNOLOGY-UPS-MIB.txt DSM
+                                                                        1.0
+                                                                             6.0.1, APM
+
+    .1.3.6.1.4.1.6574.5                           SYNOLOGY-SMART-       DSM 6.0.1
+                            synologyDiskSMART
+                                                  MIB.txt
+                                                  SYNOLOGY-SERVICES- DSM 6.2.1, APM
+    .1.3.6.1.4.1.6574.6     synologyService       MIB.                  1.0
+                                                  txt
+    .1.3.6.1.4.1.6574.101                         SYNOLOGY-STORAGEIO-          DSM 6.1.7, APM
+                            storageIO
+                                                  MIB.txt                      1.0
+    .1.3.6.1.4.1.6574.102                         SYNOLOGY-SPACEIO-            DSM 6.0.1, APM
+                            spaceIO
+                                                  MIB.txt                      1.0
+    .1.3.6.1.4.1.6574.103                         SYNOLOGY-                    DSM 7.0, APM
+                            flashCache
+                                                  FLASHCACHE-MIB.txt           1.0
+    .1.3.6.1.4.1.6574.104                         SYNOLOGY-ISCSILUN-           DSM 6.1.7, APM
+                            synologyiSCSILUN
+                                                  MIB.txt                      1.0
+    .1.3.6.1.4.1.6574.105   synologyEbox          SYNOLOGY-EBOX-MIB            DSM 6.2.1
+
+
+6
+    .1.3.6.1.4.1.6574.106   synologyHA              SYNOLOGY-SHA-MIB            DSM 6.2.2
+    .1.3.6.1.4.1.6574.107                           SYNOLOGY-NFS-MIB.txt        DSM 7.0, APM
+                            NFS
+                                                                                1.0
+    .1.3.6.1.4.1.6574.108                           SYNOLOGY-GPUINFO-           DSM 6.2.2
+                            GpuInfo
+                                                    MIB.txt
+    .1.3.6.1.4.1.6574.109   synoEthPort             SYNOLOGY-PORT-MIB.txt       SRM 1.2.5
+    .1.3.6.1.4.1.6574.110                           SYNOLOGY-ISCSITarget-       DSM 7.0
+                            synologyiSCSITarget
+                                                    MIB
+    .1.3.6.1.4.1.6574.201                           SYNOLOGY-MAILPLUS-          DSM 7.2
+                            mailplus
+                                                    MIB.txt
+
+
+Synology System MIB (OID: .1.3.6.1.4.1.6574.1)
+The Synology System MIB provides comprehensive system status information, including
+temperature and fan status, allowing users to monitor system functionality. Refer to Table 3-2 for
+detailed information available in the System MIB.
+
+Table 3-2 System MIB
+         OID        Name    Type      Status Type            Explanation     Supported OS
+    .1         systemStat
+               us
+                            Integer Normal  (1)
+                                    Failed (2)
+                                                        System partition
+                                                        status
+                                                                            DSM, DSM UC,
+                                                                            APM
+    .2         temperatur
+                            Integer -                   Temperature of this DSM, DSM UC,
+               e                                        NAS                 APM
+    .3         powerStatu
+               s
+                            Integer Normal  (1)
+                                    Failed (2)
+                                                        Returns error if
+                                                        power supplies fail
+                                                                            DSM, DSM UC,
+                                                                            APM
+    .4.1       systemFan
+               Status
+                            Integer Normal  (1)
+                                    Failed (2)
+                                                        Returns error if
+                                                        system fan fails
+                                                                            DSM, DSM UC,
+                                                                            APM
+    .4.2       cpuFanStat
+               us
+                            Integer Normal  (1)
+                                    Failed (2)
+                                                        Returns error if CPU
+                                                        fan fails
+                                                                            DSM, DSM UC,
+                                                                            APM
+    .5.1       modelNam
+                            String -                    Model name of this  DSM, DSM UC,
+               e                                        NAS                 APM
+    .5.2       serialNumb
+               er
+                            String -                    Model serial number DSM,
+                                                                            APM
+                                                                                 DSM UC,
+
+7
+    .5.3                   String -                        The version of DSM         DSM, DSM UC,
+            version
+                                                                                      APM
+                                   Available (1)
+                                   Unavailable (2)         Checks whether a
+    .5.4    upgradeAv
+            ailable
+                           Integer Connecting
+                                   Disconnected
+                                                 (3)       new version or
+                                                           update of DSM is           DSM, DSM UC
+                                   (4)                     available
+                                   Others (5)
+    .6      controllerN
+            umber
+                           Integer Controller A (0)
+                                   Controller B (1)
+                                                           The controller
+                                                           number                     DSM UC
+                                                           Utilization (%) is the
+    .7.1    cpuUtilizati
+                           Integer -                       sum of user and            DSM, APM
+            on
+                                                           system CPU usage
+                                                           Utilization (%) is the
+    .7.2    memUtiliza
+                           Integer -                       sum of memory              DSM, APM
+            tion
+                                                           usage
+                                                           Returns error if
+    .8      thermalSta
+                           Integer Normal  (1)
+                                   Failed (2)              thermal status is          DSM, APM
+            tus
+                                                           abnormal
+
+
+Synology Disk MIB (OID: .1.3.6.1.4.1.6574.2)
+The Synology Disk MIB contains several types of information regarding hard drives, including ID,
+type and so on, as listed in Table 3-3. This MIB is a table in SNMP. As such, it can increase or
+decrease in size when disks are inserted or removed. For example, if a disk is inserted, an
+additional row containing relevant information will emerge. The OID DiskIndex (.1) is reserved for
+an index of table rows and cannot be accessed. Table 3-4 describes the contents of each
+DiskStatus in detail.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.2.1.1" as a prefix since this
+MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.2.1.1.3" can be
+used to get the disk model.
+
+Table 3-3 Disk MIB
+      OID        Name        Type        Status Type            Explanation            Supported OS
+
+
+
+8
+                                                       Used internally for    DSM, DSM UC,
+    .1          diskIndex      Integer -               SNMP table and not     APM
+                                                       accessible
+    .2                         String -                Disk name in DSM      DSM, DSM UC,
+                diskID
+                                                                             APM
+    .3                         String -                Disk model            DSM, DSM UC,
+                diskModel
+                                                                             APM
+    .4                         String -                Disk type, e.g. SATA, DSM, DSM UC,
+                diskType
+                                                       SSD                   APM
+    .5          diskStatus     Integer Normal (1)*     Current disk status DSM,
+                                                                             APM
+                                                                                  DSM UC,
+
+    .6          diskTemper
+                               Integer -               Disk temperature      DSM, DSM UC,
+                ature                                                        APM
+    .7                         String data *           The role of the disk DSM 7.0 and
+                diskRole
+                                                       in system             above, APM
+                                                       The count of each DSM 7.0 and
+    .8          diskRetry      Integer -               disk connection       above
+                                                       retries
+    .9          diskBadSec
+                               Integer -               The count of each      DSM 7.0 and
+                tor                                    disk I/O bad sector    above
+    .10         diskIdentif
+                               Integer -               The count of each      DSM 7.0 and
+                yFail                                  disk identify fails    above
+    .11         diskRemain
+                               Integer -               The estimate remain    DSM 7.0 and
+                Life                                   life of each disk      above, APM
+                                                       Disk name which will
+    .12                        String -                keep the same value    DSM 7.0 and
+                diskName
+                                                       in different DSM       above, APM
+                                                       version
+    .13         diskHealth
+                               Integer Normal (1)*     Current disk health    DSM 7.1 and
+                Status                                 status                 above, APM
+         For diskStatus details, see Table 3-4
+         For diskRole details, see Table 3-5
+         For diskHealthStatus details, see Table 3-6
+
+
+9
+Table 3-4 DiskStatus Explanation
+                Status                      Explanation                Supported OS
+ Normal (1)                  The disk is functioning normally        DSM, DSM UC, APM
+                             The disk has system partitions but no   DSM, DSM UC, APM
+ Initialized (2)
+                             data
+ NotInitialized (3)          The disk is not partitioned             DSM, DSM UC, APM
+ SystemPartitionFailed (4)   Partitions on the disk are damaged      DSM, DSM UC, APM
+ Crashed (5)                 The disk is damaged                     DSM, DSM UC, APM
+
+Table 3-5 DiskRole Explanation
+                Status                      Explanation                 Supported OS
+                             Used by storage pool                     DSM 7.0 and above,
+ data
+                                                                      APM
+                             Assigned as a hot spare disk             DSM 7.0 and above,
+ hotspare
+                                                                      APM
+                             Used by SSD Cache                        DSM 7.0 and above,
+ ssd_cache
+                                                                      APM
+                             Not used by storage pool, nor hot spare, DSM 7.0 and above,
+ none
+                             nor SSD Cache                            APM
+                             Some error occurred                      DSM 7.0 and above,
+ unknown
+                                                                      APM
+
+Table 3-6 diskHealthStatus Explanation
+                Status                      Explanation                Supported OS
+                             The disk health status is normal.       DSM 7.1 and above,
+ Normal (1)
+                                                                     APM
+                             The disk health status is warning.      DSM 7.1 and above,
+ Warning (2)
+                                                                     APM
+                             The disk health status is critical.     DSM 7.1 and above,
+ Critical (3)
+                                                                     APM
+
+10
+                                 The disk health status is failing.             DSM 7.1 and above,
+     Failing (4)
+                                                                                APM
+
+
+Synology RAID MIB (OID: .1.3.6.1.4.1.6574.3)
+In addition to the disk MIB, Synology also provides an MIB for monitoring RAID status. This MIB is
+similar to the disk MIB in that rows will appear or disappear to reflect RAID creation and deletion.
+Table 3-7 lists the contents of the RAID MIB. Table 3-8 describes each RAID status in detail.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.3.1.1" as a prefix since this
+MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.3.1.1.3" can be
+used to get the RAID status.
+
+Table 3-7 RAID MIB
+      OID          Name             Type           Status             Explanation           Supported
+                                                    Type                                       OS
+                                                           Used internally for             DSM, DSM
+     .1        raidIndex            Integer    -           SNMP table and not              UC, APM
+                                                           accessible
+     .2                             String     -           The name of each                DSM, DSM
+               raidName
+                                                           RAID in DSM                     UC, APM
+     .3        raidStatus           Integer    Normal (1)* Itstatus
+                                                               shows the RAID
+                                                                    right now
+                                                                                           DSM, DSM
+                                                                                           UC, APM
+     .4                             Counter64 -            The free size of                DSM, DSM
+               raidFreeSize
+                                                           volume / disk group             UC, APM
+     .5                             Counter64 -            The total size of               DSM, DSM
+               raidTotalSize
+                                                           volume / disk group             UC, APM
+                                                           Total hotspare disks
+                                                           count which can                 DSM 7.0
+     .6        raidHotspareCnt      Integer    -           protect RAID (smaller           and above,
+                                                           than 0 means                    APM
+                                                           something wrong)
+        For RAID status details, see Table 3-8
+
+Table 3-8 RAID Status Explanation
+
+11
+                    Status                                  Explanation
+     Normal (1)                     RAID is functioning normally
+     Repairing (2)
+     Migrating (3)
+     Expanding (4)
+     Deleting (5)
+     Creating (6)                   These statuses are shown when RAID is created or deleted
+     RaidSyncing (7)
+     RaidParityChecking (8)
+     RaidAssembling (9)
+     Canceling (10)
+
+     Degrade (11)                   Degrade is shown when a tolerable failure of disk(s) occurs
+     Crashed (12)                   RAID has crashed and is now read-only
+     DataScrubbing (13)             RAID is DataScrubbing
+     RaidDeploying (14)             RAID is deploying Single volume on pool
+     RaidUnDeploying (15)           RAID is not deploying Single volume on pool
+     RaidMountCache (16)            RAID is mounting SSD cache
+     RaidUnmountCache (17)          RAID is not mounting SSD cache
+     RaidExpandingUnfinishedSHR
+     (18)
+                                    RAID continue expanding SHR if interrupted
+                                    RAID is converting Single volume on SHR to multiple volume
+     RaidConvertSHRToPool (19)
+                                    on SHR
+     RaidMigrateSHR1ToSHR2 (20)     RAID is migrating SHR1 to SHR2
+     RaidUnknownStatus (21)         RAID status is not included in the status above
+
+
+Synology UPS MIB (OID: .1.3.6.1.4.1.6574.4)
+The Synology UPS MIB provides the ability to monitor the status of a UPS device connected to
+the Synology servers. Please note that the available OIDs of the UPS MIB depend on what
+information is provided by the UPS device. If a UPS device does not provide data for a certain
+OID, that OID will not appear in the NMS software. Table 3-9 shows a partial UPS MIB table only. If
+you are interested in all OIDs, please refer to the MIB file SYNOLOGY-UPS-MIB.txt.
+
+
+12
+Table 3-9 Partial UPS MIB
+     OID         Name               Type             Status           Explanation           Supported
+                                                      Type                                     OS
+ .1.1                            String          -               UPS device model           DSM, DSM
+            upsDeviceModel
+                                                                                             UC, APM
+ .1.2       upsDeviceManuf
+                                 String          -               UPS device                 DSM, DSM
+            acturer                                              manufacturer                UC, APM
+ .1.3                            String          -               UPS device serial          DSM, DSM
+            upsDeviceSerial
+                                                                 number                      UC, APM
+ .2.1                            String          -               UPS device status          DSM, DSM
+            upsInfoStatus
+                                                                                             UC, APM
+ .2.6.2                          String          -               UPS device                 DSM, DSM
+            upsInfoMfrDate
+                                                                 manufacturing date          UC, APM
+ .2.12.1    upsInfoLoadVal
+                                 Float           -               Load on UPS device         DSM, DSM
+            ue                                                   (percent)                   UC, APM
+ .3.1.1     upsBatteryChar
+                                 Float           -               Battery charge             DSM, DSM
+            geValue                                                                          UC, APM
+                                                                 Battery level at which
+ .3.1.4     upsBatteryChar
+                                 Float           -               UPS switches to        DSM, DSM
+            geWarning                                            Warning state           UC, APM
+                                                                 (percent)
+ .3.12                           Float           -               Battery chemistry      DSM, DSM
+            upsBatteryType
+                                                                                         UC, APM
+
+
+Synology Smart MIB (OID: .1.3.6.1.4.1.6574.5)
+The Synology SMART MIB provides SMART information for each disk in internal slots (excluding
+drives installed in M.2 slots and add-in cards), similar to Storage Manager. Since each disk may
+have different SMART attributes, one OID records a single SMART attribute and uses
+diskSMARTInfoDevName to indicate its corresponding disk. Note that not all S.M.A.R.T. features
+are supported on SAS drives.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.5.1.1" as a prefix since this
+MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.5.1.1.3" can be
+used to get the SMART attribute name.
+
+13
+Table 3-10 SMART MIB
+      OID           Name         Type          Status         Explanation         Supported
+                                                Type                                 OS
+                                                          Used internally for
+ .1         diskSMARTInfoI
+                             Integer       -              SNMP table and not      DSM
+            ndex
+                                                          accessible
+                                                          Describes the disk to
+ .2         diskSMARTInfoD
+                             String        -              which this SMART        DSM
+            evName
+                                                          info belongs to
+                                                          The name of the
+ .3         diskSMARTAttrN
+                             String        -              SMART info attribute,   DSM
+            ame                                           e.g. Raw_
+                                                          Read_Error_Rate
+ .4         diskSMARTAttrI
+                             Integer       -              SMART attribute ID      DSM
+            d                                             number
+ .5         diskSMARTAttrC
+                             Integer       -              SMART attribute         DSM
+            urrent                                        current value
+ .6         diskSMARTAttr
+                             Integer       -              SMART attribute         DSM
+            Worst                                         worst value
+ .7         diskSMARTAttrT
+                             Integer       -              SMART attribute         DSM
+            hreshold                                      threshold value
+ .8         diskSMARTAttrR
+                             Integer       -              SMART attribute raw     DSM
+            aw                                            value
+ .9         diskSMARTAttrS
+                             String        -              Status of this SMART    DSM
+            tatus                                         info
+                                                          SMART attribute
+ .10        diskSMARTAttrR
+                             Counter64 -                  raw value (64 bit       DSM
+            aw64
+                                                          VER.)
+
+
+Synology Services MIB (OID: .1.3.6.1.4.1.6574.6)
+The Synology Services MIB monitors the number of users logging in via HTTP, CIFS, AFP, NFS,
+FTP, SFTP, TELNET, and SSH.
+
+
+14
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.6.1.1" as a prefix since this
+MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.6.1.1.2" can be
+used to get the service name.
+
+Table 3-11 Services MIB
+          OID        Name             Type           Status                   Explanation
+                                                      Type
+     .1                            Integer       -               Used internally for services table
+                serviceInfoIndex
+                                                                 and not accessible
+     .2         serviceName        String        -               The name of the service
+     .3                            Integer       -               The number of users using this
+                serviceUsers
+                                                                 service
+
+
+Synology StorageIO MIB (OID: .1.3.6.1.4.1.6574.101)
+The Synology StorageIO MIB has I/O information of disks.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.101.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.101.1.1.2" can
+be used to get the name of the device that we are counting/checking.
+
+Table 3-12 StorageIO MIB
+          OID        Name             Type           Status           Explanation           Supported
+                                                      Type                                     OS
+                                                                 Used internally for        DSM, DSM
+          .1    storageIOIndex     Integer       -               storageio table and        UC, APM
+                                                                 not accessible
+                                                                 The name of the            DSM, DSM
+          .2    storageIODevice    String        -               device we are              UC, APM
+                                                                 counting/checking
+                                                                 The number of bytes
+          .3                       Counter32 -                   read from this device      DSM, DSM
+                storageIONRead
+                                                                 since boot (32 bit         UC, APM
+                                                                 VER.)
+
+
+15
+                                                           The number of bytes
+     .4    storageIONWritt
+                             Counter32 -                   written to this device   DSM, DSM
+           en                                              since boot (32 bit       UC, APM
+                                                           VER.)
+                                                           The number of read       DSM, DSM
+     .5    storageIOReads    Counter32 -                   accesses from this       UC, APM
+                                                           device since boot
+                                                           The number of write      DSM, DSM
+     .6    storageIOWrites   Counter32 -                   accesses to this         UC, APM
+                                                           device since boot
+     .7                      Integer       -               The load of disk (%)     DSM, DSM
+           storageIOLA
+                                                                                    UC, APM
+                                                           The 1-minute             DSM, DSM
+     .8    storageIOLA1      Integer       -               average load of disk     UC, APM
+                                                           (%)
+                                                           The 5-minute             DSM, DSM
+     .9    storageIOLA5      Integer       -               average load of disk     UC, APM
+                                                           (%)
+                                                           The-15 minute            DSM, DSM
+     .10   storageIOLA15     Integer       -               average load of disk     UC, APM
+                                                           (%)
+                                                           The number of bytes
+     .11   storageIONRead
+                             Counter64 -                   read from this device    DSM, DSM
+           X                                               since boot (64 bit       UC, APM
+                                                           VER.)
+                                                           The number of bytes
+     .12   storageIONWritt
+                             Counter64 -                   written to this device   DSM, DSM
+           enX                                             since boot (64 bit       UC, APM
+                                                           VER.)
+     .13   storageIODevice
+                             String                        The serial number        DSM UC
+           Serial                                          of this device
+
+
+Synology SpaceIO MIB (OID: .1.3.6.1.4.1.6574.102)
+The Synology SpaceIO MIB has I/O information of volumes.
+
+
+16
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.102.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.102.1.1.2" can
+be used to get the name of the device where this volume is mounted.
+
+Table 3-13 SpaceIO MIB
+          OID       Name            Type            Status          Explanation           Supported
+                                                     Type                                    OS
+                                                               Used internally for       DSM, DSM
+     .1         spaceIOIndex     Integer        -              spaceIO table and         UC, APM
+                                                               not accessible
+                                                               The name of the           DSM, DSM
+     .2         spaceIODevice    String         -              device this volume        UC, APM
+                                                               mounted on
+                                                               The number of bytes
+     .3                          Counter32 -                   read from this            DSM, DSM
+                spaceIONRead
+                                                               volume since boot         UC, APM
+                                                               (32 bit VER.)
+                                                               The number of bytes
+     .4         spaceIONWritte
+                                 Counter32 -                   written to this           DSM, DSM
+                n                                              volume since boot         UC, APM
+                                                               (32 bit VER.)
+                                                               The number of read        DSM, DSM
+     .5         spaceIOReads     Counter32 -                   accesses from this        UC, APM
+                                                               volume since boot
+                                                               The number of write       DSM, DSM
+     .6         spaceIOWrites    Counter32 -                   accesses to this          UC, APM
+                                                               volume since boot
+     .8                          Integer        -              The load of disk in       DSM, DSM
+                spaceIOLA
+                                                               the volume (%)            UC, APM
+                                                               The 1 minute average      DSM, DSM
+     .9         spaceIOLA1       Integer        -              load of disk in the       UC, APM
+                                                               volume (%)
+                                                               The 5 minute              DSM, DSM
+     .10        spaceIOLA5       Integer        -              average load of disk      UC, APM
+                                                               in the volume (%)
+
+
+17
+                                                               The 15 minute             DSM, DSM
+ .11           spaceIOLA15       Integer        -              average load of disk      UC, APM
+                                                               in the volume (%)
+                                                               The number of bytes
+ .12                             Counter64 -                   read from this            DSM, DSM
+               spaceIONReadX
+                                                               volume since boot         UC, APM
+                                                               (64 bit VER.)
+                                                               The number of bytes
+ .13           spaceIONWritte
+                                 Counter64 -                   written to this           DSM UC
+               nX                                              volume since boot
+                                                               (64 bit VER.)
+ .14                             String         -              The UUID of this          DSM UC
+               spaceUUID
+                                                               volume
+
+
+Synology FlashCache MIB (OID: .1.3.6.1.4.1.6574.103)
+The Synology FlashCache MIB monitors the resource usage of SSD cache. The collection
+frequency is 5 seconds.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.103.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.103.1.1.2" can
+be used to get the name of the SSD on the flashcache that we are counting/checking.
+
+      Notes:
+      The MIB is only suitable for the model which support SSD cache. Otherwise, it will return
+      zero value for each OID path.
+
+Table 3-14 FlashCache MIB
+      OID           Name            Type            Status          Explanation           Supported
+                                                     Type                                    OS
+                                                               Reference index for       DSM, DSM
+ .1            flashCacheIndex   Integer        -              each observed             UC, APM
+                                                               device
+
+
+
+18
+                                       The SSD device
+ .2    flashCacheSSDD
+                         String    -   name on flashcache      DSM, DSM
+       ev                              we are counting/        UC, APM
+                                       checking
+                                       The space device
+ .3    flashCacheSpace
+                         String    -   name on flashcache      DSM, DSM
+       Dev                             we are counting/        UC, APM
+                                       checking
+ .4    flashCacheRead
+                         Counter64 -   The number of reads     DSM, DSM
+       Hits                            on flashcache           UC, APM
+ .5    flashCacheWrite
+                         Counter64 -   The number of writes    DSM, DSM
+       Hits                            on flashcache           UC, APM
+ .6    flashCacheDiskR
+                         Counter64 -   The number of reads     DSM, DSM
+       ead                             on disk                 UC, APM
+ .7    flashCacheDisk
+                         Counter64 -   The number of writes    DSM, DSM
+       Write                           on disk                 UC, APM
+                                       The number of reads     DSM, DSM
+ .8    flashCacheTotal
+                         Counter64 -   on volume with          UC, APM
+       Read
+                                       flashcache
+                                       The number of writes    DSM, DSM
+ .9    flashCacheTotal
+                         Counter64 -   on volume with          UC, APM
+       Write
+                                       flashcache
+ .10   flashCacheRead
+                         Integer   -   The read hit rate of    DSM, DSM
+       HitRate                         flashcache (%)          UC, APM
+ .11   flashCacheWrite
+                         Integer   -   The write hit rate of   DSM, DSM
+       HitRate                         flashcache (%)          UC, APM
+                                       The number of           DSM, DSM
+ .12   flashCacheRead
+                         Counter64 -   skipped sequential      UC, APM
+       SeqSkip
+                                       reads on flashcache
+                                       The number of           DSM, DSM
+ .13   flashCacheWrite
+                         Counter64 -   skipped sequential      UC, APM
+       SeqSkip
+                                       writes on flashcache
+                                       The number of data      DSM, DSM
+ .14   flashCacheWrite
+                         Counter64 -   writes to SSD for the   UC, APM
+       MissSsd
+                                       first time
+
+19
+                                                               The SSD UUID on           DSM, DSM
+ .15        flashCacheSsdU
+                                String          -              flashcache we are         UC, APM
+            uid
+                                                               counting/checking
+
+
+Synology iSCSI LUN MIB (OID: .1.3.6.1.4.1.6574.104)
+The Synology iSCSI LUN MIB can list all the loaded LUNs and show their running information. If a
+LUN has been created but not loaded (e.g. when linked to a target), it will not appear in this list.
+The throughput is 64-bit and composed of two 32-bit integers. For example, the iSCSi LUN read
+throughput is composed of higher 32-bit and lower 32-bit throughput.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.104.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.104.1.1.2" can
+be used to get the iSCSI LUN uuid.
+
+Table 3-15 iSCSI LUN MIB
+      OID         Name              Type            Status          Explanation           Supported
+                                                     Type                                    OS
+                                                               Used
+ .1         iSCSILUNInfoInd
+                                Integer         -              internally for iSCSI      DSM, DSM
+            ex                                                 LUN table and not         UC, APM
+                                                               accessible
+ .2                             String          -              LUN uuid                  DSM, DSM
+            iSCSILUNUUID
+                                                                                         UC, APM
+ .3                             String          -              LUN name                  DSM, DSM
+            iSCSILUNName
+                                                                                         UC, APM
+                                                               The higher                DSM, DSM
+ .4         iSCSILUNThroug
+                                Integer         -              32 bit of read            UC, APM
+            hputReadHigh
+                                                               throughput
+ .5         iSCSILUNThroug
+                                Integer         -              The lower 32 bit of       DSM, DSM
+            hputReadLow                                        read throughput           UC, APM
+ .6         iSCSILUNThroug
+                                Integer         -              The higher 32 bit of      DSM, DSM
+            hputWriteHigh                                      write throughput          UC, APM
+ .7         iSCSILUNThroug
+                                Integer         -              The lower 32 bit of       DSM, DSM
+            hputWriteLow                                       write throughput          UC, APM
+
+
+20
+     .8    iSCSILUNIopsRe
+                              Integer       -              LUN read iops        DSM, DSM
+           ad                                                                   UC, APM
+     .9    iSCSILUNIopsWr
+                              Integer       -              LUN write iops       DSM, DSM
+           ite                                                                  UC, APM
+     .10   iSCSILUNDiskLat
+                              Integer       -              LUN read disk        DSM, DSM
+           encyRead                                        latency              UC, APM
+     .11   iSCSILUNDiskLat
+                              Integer       -              LUN write disk       DSM, DSM
+           encyWrite                                       latency              UC, APM
+     .12   iSCSILUNNetwor
+                              Integer       -              LUN network tx       DSM, DSM
+           kLatencyTx                                      latency              UC, APM
+     .13   iSCSILUNNetwor
+                              Integer       -              LUN network rx       DSM, DSM
+           kLatencyRx                                      latency              UC, APM
+     .14   iSCSILUNIoSizeR
+                              Integer       -              LUN read average i/o DSM, DSM
+           ead                                             size                 UC, APM
+     .15   iSCSILUNIoSize
+                              Integer       -              LUN write average DSM, DSM
+           Write                                           i/o size             UC, APM
+                                                           Number of iSCSI
+     .16   iSCSILUNQueue
+                              Integer       -              commands in LUN DSM,      DSM
+                                                                                UC, APM
+           Depth
+                                                           queue
+                                                           LUN type
+     .17   iSCSILUNType       String        -              (advanced lun, block DSM,  DSM
+                                                                                UC, APM
+                                                           lun, etc.)
+
+     .18   iSCSILUNDiskLat
+                              Integer       -              Average latency of DSM    7.0
+                                                                                and above,
+           encyAvg                                         LUN disk             APM
+           iSCSILUNThinPr                                  Free space(MB) of DSM 7.0
+     .19   ovisionVolFreeM    Integer       -              thin provisioning lun's and above,
+           Bs                                              volume                  APM
+
+
+Synology Ebox MIB (OID: .1.3.6.1.4.1.6574.105)
+The Synology Ebox MIB provides the power status of expansion unit connected to Synology
+servers. Table 3-16 shows the information provided in ebox MIB. Table 3-17 describes the content
+of each eboxPower and eboxRedundantPower status in detail.
+
+21
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.105.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.105.1.1.2" can
+be used to get the expansion unit model.
+
+Table 3-16 Ebox MIB
+      OID            Name           Type            Status                  Explanation
+                                                     Type
+ .1           eboxIndex         Integer -               Expansion unit Index
+ .2        eboxModel            String  -               Expansion unit model
+ .3        eboxPower            Integer Normal (1)* Power status of expansion unit
+                                                        Redundant power status of
+ .4        eboxRedundant
+                            Integer     Normal   (1)*   expansion unit (if the ebox has no
+           Power                                        redundant power interface, this OID
+                                                        will not appear)
+    For eboxPower and eboxRedundantPower details, see Table 3-17
+
+Table 3-17 Ebox Power and Redundant Power Status Explanation
+            Status                                           Explanation
+ Normal (1)                 The power supplies well
+ Poor (2)                   The power supplies badly
+ Disconnection (3)          The power is not connected
+
+
+Synology SHA MIB (OID: .1.3.6.1.4.1.6574.106)
+The Synology SHA MIB provides basic cluster information and monitors cluster status and
+heartbeat status.
+
+Table 3-18 SHA MIB
+      OID            Name           Type            Status           Explanation          Supported
+                                                     Type                                    OS
+ .1           activeNodeNam
+                                String          -                Hostname of active       DSM
+              e                                                  server
+
+22
+ .2             passiveNodeNa
+                                   String       -             Hostname of passive    DSM
+                me                                            server
+                                                              Whether cluster can
+ .3             clusterAutoFailo
+                                   Integer      true (1)      failover once          DSM
+                ver                             false (2)     something went
+                                                              wrong
+ .4                                String       -             Hostname of High-      DSM
+                clusterName
+                                                              Availability cluster
+ .5                                Integer      *             Status of High-        DSM
+                clusterStatus
+                                                              Availability cluster
+ .6                                Integer      *             Status of heartbeat    DSM
+                heartbeatStatus
+                                                              connection
+                                                              Transfer speed of
+ .7             heartbeatTxRate    Integer      -             heartbeat in kilo-     DSM
+                                                              byte-per-second
+                                                              Heartbeat latency in
+ .8             heartbeatLatenc
+                                   Integer      -             microseconds (10^-6    DSM
+                y
+                                                              seconds)
+      For clusterStatus details, see Table 3-19
+      For heartbeatStatus details, see Table 3-20
+
+Table 3-19 Cluster Status Explanation
+                Status                            Explanation                    Supported OS
+ normal (0)                        The High-Availability cluster is healthy DSM
+                                   The High-Availability cluster has
+                                   something went wrong. Action should be
+ warning (1)                       taken to resume High-Availability feature. DSM
+                                   Please refer to High-Availability Manager
+                                   for more details.
+                                   The High-Availability cluster is in danger,
+                                   and should be resolved as soon as
+ critical (2)                      possible.                                   DSM
+                                   Please refer to High-Availability
+                                   Manager for more details.
+
+23
+                                The High-Availability cluster is               DSM
+ upgrading (3)
+                                upgrading.
+                                The High-Availability cluster is               DSM
+ processing (4)
+                                undergoing some operation.
+
+Table 3-20 Heartbeat Status Explanation
+             Status                            Explanation                       Supported OS
+ normal (0)                     The heartbeat connection is normal.            DSM
+                                Some information about heartbeat is not        DSM
+ abnormal (1)
+                                available.
+                                The High-Availability cluster loses
+                                connection to passive server through           DSM
+ disconnected (2)
+                                heartbeat interface, or it is currently in
+                                split-brain mode.
+                                The High-Availability cluster has no           DSM
+ empty (3)
+                                passive server.
+
+
+Synology NFS MIB (OID: .1.3.6.1.4.1.6574.107)
+The Synology NFS MIB monitors the maximum latency and operations of NFS. Every value will be
+cached for 3 seconds. Therefore, if you access a value twice within 3 seconds, you will get the
+same value. The maximum latency will always clear the cache and recount the value once the
+value has been updated.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.107.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.107.1.1.2" can
+be used to get the name of NFS.
+
+Table 3-21 NFS MIB
+      OID         Name              Type            Status          Explanation          Supported
+                                                     Type                                    OS
+                                                               Used internally for       DSM 7.0
+ .1          nfsIndex           Integer         -              NFS table and not         and above,
+                                                               accessible                APM
+
+
+24
+                                                                              DSM 7.0
+ .2            nfsName           String      -             The name of NFS    and above,
+                                                                              APM
+                                                           Maximum latency of DSM 7.0
+ .3            nfsTotalMaxLate
+                                 Integer     -             all the NFS        and above,
+               ncy
+                                                           operations         APM
+                                                           Maximum latency of DSM 7.0
+ .4            nfsReadMaxLate
+                                 Integer     -             the NFS read       and above,
+               ncy
+                                                           operations         APM
+                                                           Maximum latency of DSM 7.0
+ .5            nfsWriteMaxLat
+                                 Integer     -             the NFS write      and above,
+               ency
+                                                           operations         APM
+                                                           Accumulated counts DSM 7.0
+ .6            nfsTotalOPS       Counter64 -               of all the NFS     and above,
+                                                           operations         APM
+                                                           Accumulated counts DSM 7.0
+ .7            nfsReadOPS        Counter64 -               of the NFS read    and above,
+                                                           operations         APM
+                                                           Accumulated counts DSM 7.0
+ .8            nfsWriteOPS       Counter64 -               of the NFS write   and above,
+                                                           operations         APM
+
+
+Synology GPUInfo MIB (OID: .1.3.6.1.4.1.6574.108)
+The Synology GPUInfo MIB monitors the resource usage of GPU card. The collection frequency is
+5 seconds.
+
+      Notes:
+      The MIB is only available on models which supports GPU card such as the DVA3221.
+      Otherwise, it will return zero value for each OID path.
+
+Table 3-22 GPUInfo MIB
+     OID              Name         Type      Status Type        Explanation        Supported
+                                                                                      OS
+
+25
+                                               Supported
+ .1                            Integer         (0)
+                                               Unsupported Supported GPU                 DSM
+            gpuInfoSupport
+            ed
+                                               (1)
+                                                           The percentage of
+                                                           GPU time spent on
+ .2         gpuUtilization     Integer         -           processing user               DSM
+                                                           space in last 1
+                                                           second
+                                                           The percentage of
+ .3         gpuMemoryUtil
+                               Integer         -           GPU memory usage              DSM
+            ization
+                                                           in last 1 second
+                                                           The amount of
+ .4         gpuMemoryFre
+                               Integer         -           currently free GPU            DSM
+            e
+                                                           memory in kb
+                                                           The amount of
+ .5         gpuMemoryUse
+                               Integer         -           currently used GPU            DSM
+            d
+                                                           memory in kb
+ .6         gpuMemoryTot
+                               Integer         -           The total physical            DSM
+            al                                             GPU memory size
+
+
+Synology Port MIB (OID: .1.3.6.1.4.1.6574.109)
+The Synology Port MIB defines the status of each Ethernet port, such as link status and link
+speed, as listed in Table 3-23. The cache interval is 5 seconds.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.109.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.109.1.1.2" can
+be used to get the link status of the Ethernet port.
+
+      Notes:
+      The MIB is only available on models running SRM, such as RT2600ac.
+
+Table 3-23 Port MIB
+
+
+26
+      OID          Name            Type            Status           Explanation          Supported
+                                                    Type                                    OS
+                                                               Used internally for       SRM 1.2.5
+ .1         ethPortIndex        Integer32      -               SNMP table and not        and above
+                                                               accessible
+                                               unknown
+ .2                             Integer        (1)             The link status of the SRM 1.2.5
+            ethPortStatus
+                                               up (2)          Ethernet port          and above
+                                               down (3)
+                                                               The link speed of the
+ .3                             Gauge32        -               Ethernet port in units SRM 1.2.5
+            ethPortSpeed
+                                                               of 1,000,000 bits per and above
+                                                               second
+
+
+Synology iSCSI Target MIB (OID: .1.3.6.1.4.1.6574.110)
+The Synology iSCSI Target MIB can list all iSCSI targets and show their basic information, such as
+target name, IQN and connection status.
+In order to directly access a specific OID, you must use ".1.3.6.1.4.1.6574.110.1.1" as a prefix since
+this MIB contains the relative table and entry number. For example, ".1.3.6.1.4.1.6574.110.1.1.2" can
+be used to get the iSCSI target name.
+
+Table 3-24 iSCSI Target MIB
+      OID          Name            Type            Status           Explanation          Supported
+                                                    Type                                    OS
+                                                               Used internally for       DSM 7.0
+ .1         iSCSITargetInfoI
+                                Integer32      -               SNMP table and not        and above
+            ndex
+                                                               accessible
+ .2         iSCSITargetNam
+                                String         -               Name of the iSCSI         DSM 7.0
+            e                                                  target                    and above
+ .3                             String         -               IQN of the iSCSI          DSM 7.0
+            iSCSITargetIQN
+                                                               target                    and above
+ .4         iSCSITargetConn
+                                String         -               Connection status of      DSM 7.0
+            ectionStatus                                       the iSCSI target          and above
+
+
+27
+Synology SMB Service MIB (OID: .1.3.6.1.4.1.6574.111)
+The Synology SMB MIB monitors SMBv2 latency and operations, with values cached for 5
+seconds. If a value is accessed multiple times within this period, the same result will be returned.
+Latency values automatically clear the cache and recount once updated.
+To directly access a specific OID, use ".1.3.6.1.4.1.6574.111.2.1" as the prefix since this MIB contains
+the relative table and entry numbers. For example, ".1.3.6.1.4.1.6574.111.2.1.2.1" retrieves the name
+of smb2_break.
+
+Table 3-25 SMB Service MIB
+     OID         Name             Type            Status            Explanation           Supported
+                                                   Type                                       OS
+ .1.1.2                        String         -              SMB cpu name                 DSM 7.2 or
+            SMBCpuName
+                                                                                          above
+ .1.1.3                        Integer        -              SMB % cpu user               DSM 7.2 or
+            SMBCpuUser
+                                                                                          above
+ .1.1.4     SMBCpuSyste
+                               Integer        -              SMB % cpu system             DSM 7.2 or
+            m                                                                             above
+ .2.1.2     SMBCmdNam
+                               String         -              SMB command name             DSM 7.2 or
+            e                                                                             above
+ .2.1.2.1   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Break                   above
+ .2.1.2.2   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Cancel                  above
+ .2.1.2.3   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Close                   above
+ .2.1.2.4   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Create                  above
+ .2.1.2.5   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Find                    above
+ .2.1.2.6   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/Flush                   above
+ .2.1.2.7   SMBCmdNam
+                               String         -              Command name for             DSM 7.2 or
+            e                                                SMB2/GetInfo                 above
+
+28
+ .2.1.2.8    SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/Ioctl             above
+ .2.1.2.9    SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/KeepAlive         above
+ .2.1.2.10   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/Lock              above
+ .2.1.2.11   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/LogOff            above
+ .2.1.2.12   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/NegotiateProtocol above
+ .2.1.2.13   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/Notify            above
+ .2.1.2.14   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/Read              above
+ .2.1.2.15   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/SessionSetup      above
+ .2.1.2.16   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/SetInfo           above
+ .2.1.2.17   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/TreeConnect       above
+ .2.1.2.18   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/TreeDisconnect above
+ .2.1.2.19   SMBCmdNam
+                         String    -   Command name for       DSM 7.2 or
+             e                         SMB2/Write             above
+ .2.1.3      SMBCmdCMD
+                         Integer   -   SMB command per        DSM 7.2 or
+             PS                        second                 above
+ .2.1.3.1    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Break         above
+ .2.1.3.2    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Cancel        above
+ .2.1.3.3    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Close         above
+
+
+29
+ .2.1.3.4    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Create        above
+ .2.1.3.5    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Find          above
+ .2.1.3.6    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Flush         above
+ .2.1.3.7    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/GetInfo       above
+ .2.1.3.8    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Ioctl         above
+ .2.1.3.9    SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/KeepAlive     above
+ .2.1.3.10   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Lock          above
+ .2.1.3.11   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/LogOff        above
+                                       Command per second DSM 7.2 or
+ .2.1.3.12   SMBCmdCMD
+                         Integer   -   for
+             PS
+                                       SMB2/NegotiateProtocol above
+ .2.1.3.13   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Notify        above
+ .2.1.3.14   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/Read          above
+ .2.1.3.15   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/SessionSetup above
+ .2.1.3.16   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/SetInfo       above
+ .2.1.3.17   SMBCmdCMD
+                         Integer   -   Command per second DSM 7.2 or
+             PS                        for SMB2/TreeConnect above
+                                       Command per second DSM 7.2 or
+ .2.1.3.18   SMBCmdCMD
+                         Integer   -   for
+             PS
+                                       SMB2/TreeDisconnect above
+ .2.1.3.19   SMBCmdCMD
+                         Integer   -   Command per second   DSM 7.2 or
+             PS                        for SMB2/Write       above
+
+30
+ .2.1.4      SMBCmdAvgL
+                          Integer   -   SMB command average         DSM 7.2 or
+             atency                     latency                     above
+                                        Command average             DSM 7.2 or
+ .2.1.4.1    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Break      above
+             atency
+                                        in micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.2    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Cancel     above
+             atency
+                                        in micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.3    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Close      above
+             atency
+                                        in micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.4    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Create     above
+             atency
+                                        in micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.5    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Find in    above
+             atency
+                                        micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.6    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Flush      above
+             atency
+                                        in micro second
+                                        Command average
+ .2.1.4.7    SMBCmdAvgL
+                          Integer   -   latency for                 DSM 7.2 or
+             atency                     SMB2/GetInfo in micro       above
+                                        second
+                                        Command average             DSM 7.2 or
+ .2.1.4.8    SMBCmdAvgL
+                          Integer   -   latency for SMB2/Ioctl in   above
+             atency
+                                        micro second
+                                        Command average
+ .2.1.4.9    SMBCmdAvgL
+                          Integer   -   latency for                 DSM 7.2 or
+             atency                     SMB2/KeepAlive in           above
+                                        micro second
+                                        Command average             DSM 7.2 or
+ .2.1.4.10   SMBCmdAvgL
+                          Integer   -   latency for SMB2/Lock       above
+             atency
+                                        in micro second
+
+
+
+31
+                                        Command average
+ .2.1.4.11   SMBCmdAvgL
+                          Integer   -   latency for SMB2/LogOff DSM 7.2 or
+                                                                above
+             atency
+                                        in micro second
+                                        Command average
+ .2.1.4.12   SMBCmdAvgL
+                          Integer   -   latency for             DSM 7.2 or
+             atency                     SMB2/NegotiateProtocol above
+                                        in micro second
+                                        Command average
+ .2.1.4.13   SMBCmdAvgL
+                          Integer   -   latency for SMB2/Notify DSM 7.2 or
+                                                                above
+             atency
+                                        in micro second
+                                        Command average          DSM 7.2 or
+ .2.1.4.14 atency
+             SMBCmdAvgL
+                          Integer   -   latency for SMB2/Read    above
+                                        in micro second
+                                        Command average
+ .2.1.4.15   SMBCmdAvgL
+                          Integer   -   latency for              DSM 7.2 or
+             atency                     SMB2/SessionSetup in     above
+                                        micro second
+                                        Command average
+ .2.1.4.16   SMBCmdAvgL
+                          Integer   -   latency for              DSM 7.2 or
+             atency                     SMB2/SetInfo in micro    above
+                                        second
+                                        Command average
+ .2.1.4.17   SMBCmdAvgL
+                          Integer   -   latency for              DSM 7.2 or
+             atency                     SMB2/TreeConnect in      above
+                                        micro second
+                                        Command average
+ .2.1.4.18   SMBCmdAvgL
+                          Integer   -   latency for              DSM 7.2 or
+             atency                     SMB2/TreeDisconnect in   above
+                                        micro second
+                                        Command average          DSM 7.2 or
+ .2.1.4.19   SMBCmdAvgL
+                          Integer   -   latency for SMB2/Write   above
+             atency
+                                        in micro second
+ .3.1.2      SMBRWPktNa
+                          String    -   Size of the read/write   DSM 7.2 or
+             me                         packet                   above
+ .3.1.2.1    SMBRWPktNa
+                          String    -   Read packet of size      DSM 7.2 or
+             me                         1024k                    above
+
+32
+ .3.1.2.2    SMBRWPktNa
+             me
+                          String    -   Read packet of size 16k DSM   7.2 or
+                                                                  above
+ .3.1.2.3    SMBRWPktNa
+                          String    -   Read packet of size       DSM 7.2 or
+             me                         256k                      above
+ .3.1.2.4    SMBRWPktNa
+             me
+                          String    -   Read packet of size 4k DSM    7.2 or
+                                                                  above
+ .3.1.2.5    SMBRWPktNa
+             me
+                          String    -   Read packet of size 64k DSM   7.2 or
+                                                                  above
+ .3.1.2.6    SMBRWPktNa
+                          String    -   Read packet of size over DSM 7.2 or
+             me                         1024k                     above
+ .3.1.2.7    SMBRWPktNa
+                          String    -   Write packet of size      DSM 7.2 or
+             me                         1024k                     above
+ .3.1.2.8    SMBRWPktNa
+             me
+                          String    -   Write packet of size 16k DSM  7.2 or
+                                                                  above
+ .3.1.2.9    SMBRWPktNa
+                          String    -   Write packet of size      DSM 7.2 or
+             me                         256k                      above
+ .3.1.2.10   SMBRWPktNa
+             me
+                          String    -   Write packet of size 4k DSM   7.2 or
+                                                                  above
+ .3.1.2.11   SMBRWPktNa
+             me
+                          String    -   Write packet of size 64k DSM  7.2 or
+                                                                  above
+ .3.1.2.12   SMBRWPktNa
+                          String    -   Write packet of size over DSM 7.2 or
+             me                         1024k                     above
+ .3.1.3                   Integer   -   SMB RW packets per        DSM 7.2 or
+             SMBRWPktPS
+                                        second                    above
+ .3.1.3.1                 Integer   -   Read packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 1024k per second above
+ .3.1.3.2                 Integer   -   Read packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 16k per second       above
+ .3.1.3.3                 Integer   -   Read packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 256k per second      above
+ .3.1.3.4                 Integer   -   Read packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 4k per second        above
+
+
+33
+ .3.1.3.5                 Integer   -   Read packet count of       DSM 7.2 or
+             SMBRWPktPS
+                                        size 64k per second        above
+                                        Read packet count of       DSM 7.2 or
+ .3.1.3.6    SMBRWPktPS   Integer   -   size over 1024k per        above
+                                        second
+ .3.1.3.7                 Integer   -   Write packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 1024k per second      above
+ .3.1.3.8                 Integer   -   Write packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 16k per second        above
+ .3.1.3.9                 Integer   -   Write packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 256k per second       above
+ .3.1.3.10                Integer   -   Write packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 4k per second         above
+ .3.1.3.11                Integer   -   Write packet count of      DSM 7.2 or
+             SMBRWPktPS
+                                        size 64k per second        above
+                                        Write packet count of      DSM 7.2 or
+ .3.1.3.12   SMBRWPktPS   Integer   -   size over 1024k per        above
+                                        second
+ .3.1.4      SMBRWPktAv
+                          Integer   -   SMB RW packets avg         DSM 7.2 or
+             gLatency                   latency                    above
+                                        Read packet average        DSM 7.2 or
+ .3.1.4.1    SMBRWPktAv
+                          Integer   -   latency of size 1024k in   above
+             gLatency
+                                        micro second
+                                        Read packet average        DSM 7.2 or
+ .3.1.4.2    SMBRWPktAv
+                          Integer   -   latency of size 16k in     above
+             gLatency
+                                        micro second
+                                        Read packet average        DSM 7.2 or
+ .3.1.4.3    SMBRWPktAv
+                          Integer   -   latency of size 256k in    above
+             gLatency
+                                        micro second
+                                        Read packet average        DSM 7.2 or
+ .3.1.4.4    SMBRWPktAv
+                          Integer   -   latency of size 4k in      above
+             gLatency
+                                        micro second
+                                        Read packet average        DSM 7.2 or
+ .3.1.4.5    SMBRWPktAv
+                          Integer   -   latency of size 64k in     above
+             gLatency
+                                        micro second
+
+34
+                                                            Read packet average           DSM 7.2 or
+ .3.1.4.6    SMBRWPktAv
+                               Integer        -             latency of size over          above
+             gLatency
+                                                            1024k in micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.7    SMBRWPktAv
+                               Integer        -             latency of size 1024k in      above
+             gLatency
+                                                            micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.8    SMBRWPktAv
+                               Integer        -             latency of size 16k in        above
+             gLatency
+                                                            micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.9    SMBRWPktAv
+                               Integer        -             latency of size 256k in       above
+             gLatency
+                                                            micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.10   SMBRWPktAv
+                               Integer        -             latency of size 4k in         above
+             gLatency
+                                                            micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.11   SMBRWPktAv
+                               Integer        -             latency of size 64k in        above
+             gLatency
+                                                            micro second
+                                                            Write packet average          DSM 7.2 or
+ .3.1.4.12   SMBRWPktAv
+                               Integer        -             latency of size over          above
+             gLatency
+                                                            1024k in micro second
+
+
+Synology MailPlus MIB (OID: .1.3.6.1.4.1.6574.201)
+The Synology MailPlus MIB monitors mail-related information, including mail delivery results,
+threat events, mail queue, IMAP, POP3, SMTP connections, and service status. In a MailPlus high-
+availability (HA) setup, delivery (.1.3.6.1.4.1.6574.201.1) and threat (.1.3.6.1.4.1.6574.201.2) numbers
+are taken from the primary server’s transaction log and include data from both servers. By default,
+the secondary server does not record transaction logs but relies on log transfers from the primary
+server.
+While delivery and threat data reflect activities on both servers, the mail queue, IMAP, POP3,
+SMTP connections, and service status (.1.3.6.1.4.1.6574.201.3 - .1.3.6.1.4.1.6574.201.6) numbers are
+based solely on the local server’s activities.
+
+Table 3-26 MailPlus MIB
+
+35
+     OID           Name          Type       Status       Explanation         Supported
+                                             Type                               OS
+                                                     The number of
+ .1.1                         Integer   -            emails sent in the      DSM 7.2
+           deliverySent
+                                                     past 10 minutes on      and above
+                                                     MailPlus Server
+                                                     The number of
+ .1.2                         Integer   -            emails received in      DSM 7.2
+           deliveryReceived
+                                                     the past 10 minutes     and above
+                                                     on MailPlus Server
+                                                     The number of
+ .1.3                         Integer   -            emails bounced in       DSM 7.2
+           deliveryBounce
+                                                     the past 10 minutes     and above
+                                                     on MailPlus Server
+                                                     The number of
+ .1.4                         Integer   -            emails deferred in      DSM 7.2
+           deliveryDeferred
+                                                     the past 10 minutes     and above
+                                                     on MailPlus Server
+                                                     The number of
+ .1.5                         Integer   -            emails expired in the   DSM 7.2
+           deliveryExpired
+                                                     past 10 minutes on      and above
+                                                     MailPlus Server
+                                                     The number of
+ .1.6      deliveryForward
+                              Integer   -            emails forwarded in     DSM 7.2
+           ed                                        the past 10 minutes     and above
+                                                     on MailPlus Server
+                                                     The number of
+                                                     emails deleted from     DSM 7.2
+ .1.7      deliveryDeletedI
+                              Integer   -            the queue in the past   and above
+           nQueue
+                                                     10 minutes on
+                                                     MailPlus Server
+                                                     The number of MCP
+                                                     (Message Content
+ .2.1      threatDataProte
+                              Integer   -            Protection) incidents   DSM 7.2
+           ction                                     occurred on MailPlus    and above
+                                                     Server in the past 10
+                                                     minutes
+
+36
+                                        The number of
+                                        DMARC incidents         DSM 7.2
+ .2.2   threatDmarc       Integer   -   occurred on MailPlus    and above
+                                        Server in the past 10
+                                        minutes
+                                        The number of SPF
+ .2.3                     Integer   -   incidents occurred      DSM 7.2
+        threatSpf
+                                        on MailPlus Server in   and above
+                                        the past 10 minutes
+                                        The number of spam
+ .2.4                     Integer   -   incidents occurred      DSM 7.2
+        threatSpam
+                                        on MailPlus Server in   and above
+                                        the past 10 minutes
+                                        The number of
+                                        DNSBL incidents         DSM 7.2
+ .2.5   threatDnsbl       Integer   -   occurred on MailPlus    and above
+                                        Server in the past 10
+                                        minutes
+                                        The number of DKIM
+ .2.6                     Integer   -   incidents occurred      DSM 7.2
+        threatDkim
+                                        on MailPlus Server in   and above
+                                        the past 10 minutes
+                                        The number of
+                                        malicious content       DSM 7.2
+ .2.7   threatMalicious
+                          Integer   -   incidents occurred      and above
+        Content
+                                        on MailPlus Server in
+                                        the past 10 minutes
+                                        The number of
+                                        attachment filter       DSM 7.2
+ .2.8   threatAttachme
+                          Integer   -   incidents occurred      and above
+        ntFilter
+                                        on MailPlus Server in
+                                        the past 10 minutes
+                                        The number of virus
+ .2.9                     Integer   -   incidents occurred      DSM 7.2
+        threatVirus
+                                        on MailPlus Server in   and above
+                                        the past 10 minutes
+
+
+
+37
+                                                The number of block
+                                                list incidents          DSM 7.2
+ .2.10   threatsBlocklist   Integer   -         occurred on MailPlus    and above
+                                                Server in the past 10
+                                                minutes
+                                                The number of           DSM 7.2
+ .3.1    queueMaildrop      Integer   -         emails in the           and above
+                                                maildrop queue
+                                                The number of           DSM 7.2
+ .3.2    queueActive        Integer   -         emails in the active    and above
+                                                queue
+                                                The number of           DSM 7.2
+ .3.3    queueIncoming      Integer   -         emails in the           and above
+                                                incoming queue
+                                                The number of           DSM 7.2
+ .3.4    queueDeferred      Integer   -         emails in the           and above
+                                                deferred queue.
+                                                The number of           DSM 7.2
+ .3.5    queueHold          Integer   -         emails in the hold      and above
+                                                queue
+ .4.1                       Integer   -         The number of           DSM 7.2
+         connectionImap
+                                                connections via IMAP    and above
+                                                The number of           DSM 7.2
+ .4.2    connectionPop3     Integer   -         connections via         and above
+                                                POP3
+                                                The number of           DSM 7.2
+ .5.1    smtpInbound        Integer   -         inbound SMTP            and above
+                                                connections
+                                                The number of           DSM 7.2
+ .5.2    smtpOutbound       Integer   -         outbound SMTP           and above
+                                                connections
+ .6.1                       Integer   Running   The status of Postfix   DSM 7.2
+         servicePostfix
+                                      (0)*      service                 and above
+ .6.2                       Integer   Running   The status of           DSM 7.2
+         serviceDovecot
+                                      (0)*      Dovecot service         and above
+
+
+38
+     For servicePostfix and serviceDovecot details, see Table 3-27
+
+Table 3-27 Postfix Service and Dovecot Service Status Explanation
+          Status                                          Explanation
+ Running (0)               The service is up and running as expected.
+ Abnormal (1)              The service is currently inactive and not running.
+                           Although the service is not running, a PID (Process ID) file exists,
+ Dead PID File (2)         indicating a possible issue with the service's startup or termination
+                           process.
+                           The service is running, but its utilized ports are not actively listening
+ Port Not Listening (3)
+                           for connections.
+                           The status of the service cannot be definitively determined. It may be
+ Unknown (6)
+                           inactive when it should be running or active when it should be inactive.
+
+
+
+
+39
+Useful OIDs
+Although there are many native MIB files supported by Synology, user may be interested in
+specific information about the Synology servers, such as CPU, memory and so on. The tables
+below list the native OIDs related to load, CPU, memory, network and disk for gathering useful
+device’s data easily.
+
+Table 4-1 CPU-Related OID
+            OID                      Name                 Explanation            Supported OS
+ .1.3.6.1.4.1.2021.10.1.5.1                       System load average           DSM, DSM UC,
+                              laLoadInt.1
+                                                  within the last 1 minute      APM
+ .1.3.6.1.4.1.2021.10.1.5.2                       System load average           DSM, DSM UC,
+                              laLoadInt.2
+                                                  within the last 5 minutes     APM
+ .1.3.6.1.4.1.2021.10.1.5.3 laLoadInt.3           System load average           DSM, DSM UC,
+                                                  within the last 15 minutes    APM
+                                                  The percentage of CPU         DSM, DSM UC,
+ .1.3.6.1.4.1.2021.11.9.0     ssCpuUser           time spent processing         APM
+                                                  user-level code
+                                                  The percentage of CPU
+                                                  time spent processing         DSM, DSM UC,
+ .1.3.6.1.4.1.2021.11.10.0    ssCpuSystem         system- level code,           APM
+                                                  calculated over the last
+                                                  minute
+                                                  The percentage of
+ .1.3.6.1.4.1.2021.11.11.0                        processor time spent idle,    DSM, DSM UC,
+                              ssCpuIdle
+                                                  calculated over the last      APM
+                                                  minute
+
+Table 4-2 Memory-Related OID
+           OID                      Name                 Explanation         Supported OS
+                                                  The total amount of swap DSM, DSM UC,
+ .1.3.6.1.4.1.2021.4.3.0      memTotalSwap        space configured for this APM
+                                                  host
+
+40
+                                            The amount of swap            DSM, DSM UC,
+ .1.3.6.1.4.1.2021.4.4.0    memAvailSwap    space currently unused or     APM
+                                            available
+ .1.3.6.1.4.1.2021.4.5.0                    The total amount of real/     DSM, DSM UC,
+                            memTotalReal
+                                            physical memory               APM
+                                            The amount of
+ .1.3.6.1.4.1.2021.4.6.0                    real/physical memory          DSM, DSM UC,
+                            memAvailReal
+                                            currently unused or           APM
+                                            available
+                                            The total amount of
+                                            memory free or available
+                                            for use on this host (This    DSM, DSM UC,
+ .1.3.6.1.4.1.2021.4.11.0   memTotalFree    value typically covers        APM
+                                            both real memory and
+                                            swap space or virtual
+                                            memory.)
+                                            The total amount of real
+ .1.3.6.1.4.1.2021.4.13.0                   or virtual memory             DSM, DSM UC,
+                            memShared
+                                            currently allocated for use   APM
+                                            as shared memory
+                                            The total amount of real
+ .1.3.6.1.4.1.2021.4.14.0                   or virtual memory             DSM, DSM UC,
+                            memBuffer
+                                            currently allocated for use   APM
+                                            as memory buffers
+                                            The total amount of real
+ .1.3.6.1.4.1.2021.4.15.0                   or virtual memory             DSM, DSM UC,
+                            memCached
+                                            currently allocated for use   APM
+                                            as cached memory
+
+Table 4-3 Network-Related OID
+            OID                      Name           Explanation            Supported OS
+ .1.3.6.1.2.1.31.1.1.1.1                    The textual name of the       DSM, DSM UC,
+                            ifName
+                                            interface                     APM
+                                            The total number of           DSM, DSM UC,
+ .1.3.6.1.2.1.31.1.1.1.6    ifHCInOctets    octets received on the        APM
+                                            interface
+
+41
+                                                         The total number of           DSM, DSM UC,
+ .1.3.6.1.2.1.31.1.1.1.10        ifHCOutOctets           octets transmitted out of     APM
+                                                         the interface
+
+Table 4-4 Disk-Related OID
+              OID                            Name                 Explanation           Supported OS
+                                                          A description of the type
+ .1.3.6.1.2.1.25.2.3.1.3                                  and instance of the          DSM, DSM UC,
+                                    hrStorageDescr
+                                                          storage described by this    APM
+                                                          entry
+                                                          The size, in bytes, of the   DSM, DSM UC,
+ .1.3.6.1.2.1.25.2.3.1.4            hrStorageAllocatio
+                                                          data objects allocated       APM
+                                    nUnits
+                                                          from this pool
+                                                          The size of the storage
+ .1.3.6.1.2.1.25.2.3.1.5                                  represented by this entry,   DSM, DSM UC,
+                                    hrStorageSize
+                                                          in units of                  APM
+                                                          hrStorageAllocationUnits
+                                                          The amount of the            DSM, DSM UC,
+ .1.3.6.1.2.1.25.2.3.1.6            hrStorageUsed         storage represented by       APM
+                                                          this entry
+ .1.3.6.1.4.1.2021.13.15.1.1.2                            The name of the device       DSM, DSM UC,
+                                    diskIODevice
+                                                          we are counting/checking     APM
+                                                          The number of bytes read     DSM, DSM UC,
+ .1.3.6.1.4.1.2021.13.15.1.1.12     diskIONReadX          from this device since       APM
+                                                          boot
+                                                          The number of bytes          DSM, DSM UC,
+ .1.3.6.1.4.1.2021.13.15.1.1.13 diskIONWrittenX           written to this device       APM
+                                                          since boot
+                                                          For Synology disk            DSM, DSM UC,
+ .1.3.6.1.4.1.6574.2                synoDisk              information (Synology        APM
+                                                          only)
+
+Table 4-5 System-Related OID
+            OID                         Name                    Explanation            Supported OS
+
+42
+                                    For Synology system     DSM, DSM UC,
+ .1.3.6.1.4.1.6574.1   synoSystem   information (Synology   APM
+                                    only)
+
+Table 4-6 RAID-Related OID
+           OID               Name          Explanation      Supported OS
+                                    For Synology RAID       DSM, DSM UC,
+ .1.3.6.1.4.1.6574.3   synoRaid     information (Synology   APM
+                                    only)
+
+Table 4-7 UPS-Related OID
+           OID               Name          Explanation      Supported OS
+                                    For Synology UPS        DSM, DSM UC,
+ .1.3.6.1.4.1.6574.4   synoUPS      information (Synology   APM
+                                    only)
+
+
+
+
+43
+Monitor Specific OIDs
+In any NMS, particular MIB files are needed in order to capture data through SNMP. Users need to
+import all MIB files to ensure that the NMS can resolve specific OIDs. Once imported, data can be
+captured by setting up the NMS. Although the means of operating different kinds of NMS may
+vary, the process of OID monitoring is similar. The overall procedure is as follows.
+  1. Import MIB file into NMS.
+  2. Set up the NMS to monitor specific OIDs.
+The following guide demonstrates the usage of PRTG (a type of NMS) including how to import
+MIB files and set up monitoring for the provided OIDs. For further help regarding PRTG, please
+consult PRTG documentation, as the following is only intended to be a brief description of OID
+monitoring.
+
+
+Import MIB Files
+As PRTG cannot import MIB files directly, Paessler MIB Importer is required to convert MIB files
+into the PRTG format:
+  1. Download Paessler MIB Importer from http://www.paessler.com/tools/mibimporter and install
+     it on your computer.
+  2. Go to Import > MIB Files.
+  3. Choose all the Synology MIB file together and click Open File. All MIB files (cf. Table 2-1) must
+     be imported together as they are mutually dependent and Paessler MIB Importer cannot load
+     them individually.
+
+
+
+
+44
+     a. If the import is successful, a window should appear.
+
+
+
+
+     b. Detailed information on MIB is shown as follows.
+
+
+
+
+ 4. Go to File > Save As to export to the PRTG-supported format .A PRTG-supported library
+    containing the MIB information will then be generated.
+
+
+45
+Set up the NMS
+The PRTG-supported library containing the MIB files in question should be placed into the folder:
+“snmplibs”. Once this has been done, specific OIDs can be set up for monitoring in PRTG. This
+guide assumes that your Synology servers has already been added to the devices list and
+focuses only on how to add OIDs for monitoring.
+ 1. Enter the PRTG Network Monitor.
+ 2. Go to Sensors > Add Sensor.
+
+
+
+
+ 3. Click Add sensor to an existing device and choose a device.
+
+
+
+
+46
+ 4. Choose SNMP Library and the library exported in the previous section.
+
+
+
+
+ 5. Select items for monitoring.
+
+
+
+
+47
+Document Revision History
+This table describes the revisions made to Synology servers MIB Guide.
+
+Table 6-1 Document Revision History
+         MIB                                          Explanation
+ 2012-07-19              Document created
+ 2013-10-29              Modified OID name and added UPS MIB
+ 2013-11-04              Added more MIBs and useful OID
+ 2016-10-31              Added more MIBs
+ 2018-06-30              Added Ebox MIB
+                         Added useful OIDs in RAID MIB
+ 2018-12-18              Added GPUInfo MIB
+                         Added FlashCache MIB
+ 2018-12-24              Added SHA MIB
+ 2020-01-10              Added information for Synology Unified Controller and eGPUMIB
+ 2021-02-23              Added PORT MIB for SRM
+ 2021-05-25              Added NFS MIB and iSCSI Target MIB
+ 2022-04-19              Added useful OIDs in Disk MIB
+ 2024-07-16              Added Synology MailPlus MIB
+ 2024-12-16              Added Synology SMB Service MIB
+
+
+
+
+48
+Copyright and Disclaimer Notices
+Synology Inc.
+© 2015-2022 Synology Inc.
+All rights reserved.
+No part of this publication may be reproduced, stored in a retrieval system, or transmitted, in any
+form or by any means, mechanical, electronic, photocopying, recording, or otherwise, without
+prior written permission of Synology Inc., with the following exceptions: Any person is hereby
+authorized to store documentation on a single computer for personal use only and to print copies
+of documentation for personal use provided that the documentation contains Synology’s
+copyright notice.
+The Synology logo is a trademark of Synology Inc.
+No licenses, express or implied, are granted with respect to any of the technology described in
+this document. Synology retains all intellectual property rights associated with the technology
+described in this document. This document is intended to assist application developers to
+develop applications only for Synology-labelled computers.
+Every effort has been made to ensure that the information in this document is accurate. Synology
+is not responsible for typographical errors.
+Synology Inc.
+9F., No.1. Yuandong Rd., Banqiao Dist., New Taipei City 220, Taiwann
+Synology and the Synology logo are trademarks of Synology Inc., registered in the United States
+and other countries.
+Marvell is registered trademarks of Marvell Semiconductor, Inc. or its subsidiaries in the United
+States and other countries.
+Freescale is registered trademarks of Freescale Semiconductor, Inc. or its subsidiaries in the
+United States and other countries.
+Other products and company names mentioned herein are trademarks of their respective holders.
+Even though Synology has reviewed this document, SYNOLOGY MAKES NO WARRANTY OR
+REPRESENTATION, EITHER EXPRESS OR IMPLIED, WITH RESPECT TO THIS DOCUMENT, ITS
+QUALITY, ACCURACY, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE. AS A
+RESULT, THIS DOCUMENT IS PROVIDED “AS IS,” AND YOU, THE READER, ARE ASSUMING THE
+ENTIRE RISK AS TO ITS QUALITY AND ACCURACY. IN NO EVENT WILL SYNOLOGY BE LIABLE
+FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL DAMAGES RESULTING
+FROM ANY DEFECT OR INACCURACY IN THIS DOCUMENT, even if advised of the possibility of
+such damages.
+
+49
+THE WARRANTY AND REMEDIES SET FORTH ABOVE ARE EXCLUSIVE AND IN LIEU OF ALL
+OTHERS, ORAL OR WRITTEN, EXPRESS OR IMPLIED. No Synology dealer, agent, or employee is
+authorized to make any modification, extension, or addition to this warranty.
+Some states do not allow the exclusion or limitation of implied warranties or liability for incidental
+or consequential damages, so the above limitation or exclusion may not apply to you. This
+warranty gives you specific legal rights, and you may also have other rights which vary from state
+to state.
+
+
+
+
+50
+
