@@ -29,3 +29,9 @@
     name: docker-stats
     state: restarted
   become: true
+
+- name: Restart synology-snmp
+  ansible.builtin.systemd:
+    name: synology-snmp
+    state: restarted
+  become: true

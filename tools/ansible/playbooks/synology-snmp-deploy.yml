@@ -1,0 +1,70 @@
+---
+# synology-snmp Collector Deployment Playbook
+#
+# Deploys the ts-store synology-snmp collector onto a POLLER host (the
+# services LXC). The collector reaches the Synology NAS over SNMPv3 and
+# writes three streams to a ts-store over HTTP.
+#
+# NOTHING IS INSTALLED ON THE NAS. That is the point: DSM has no systemd
+# convention to hook, wipes unmanaged files on upgrade, and — for an end
+# user's NAS you don't administer — should not need a shell account at all.
+# The only NAS-side change is enabling SNMPv3 in
+# Control Panel → Terminal & SNMP.
+#
+# Why SNMP rather than DSM's JSON API: the web API gates nearly every useful
+# read behind an account in the `administrators` group. Verified on DSM 7.3 —
+# a non-admin account gets error 105 for system utilization, services and
+# storage, and a silently FILTERED package list (5 of 15 rows, no error).
+# SNMPv3 needs no DSM account and returns strictly more, including per-disk
+# health and UPS state.
+#
+# The three target stores must already exist on the ts-store server, created
+# via tsstore_server_stores (run `tsstore-deploy.yml --limit trv-srv-002`
+# first).
+#
+# The binary is built locally from ../../../../ts-store/examples/synology-snmp
+# (requires a Go toolchain on the control node) and pushed — not a release
+# asset. It is a SEPARATE Go module, so the build runs inside that directory.
+#
+# Per-host config lives in host_vars/<poller-host>.yml as synology_snmp_*:
+#   synology_snmp_target        NAS hostname or IP
+#   synology_snmp_http          ts-store URL (http://192.168.1.12:21080)
+#   synology_snmp_store_prefix  -> <prefix>-{disks,volumes,system}
+#   synology_snmp_user_name / _auth_pass / _priv_pass   SNMPv3 creds (vault)
+#   synology_snmp_disks_key / _volumes_key / _system_key  API keys (vault)
+# Optional: synology_snmp_interval (default 60).
+#
+# Usage:
+#   ansible-playbook playbooks/synology-snmp-deploy.yml
+#   ansible-playbook playbooks/synology-snmp-deploy.yml -e synology_snmp_interval=30
+#
+# The default target is the `services` host; override with --limit or
+# -e synology_snmp_poller=<host>.
+
+- name: Deploy synology-snmp collector
+  hosts: "{{ synology_snmp_poller | default('services') }}"
+  become: false
+
+  tasks:
+    - name: Ensure synology-snmp config is present for this host
+      ansible.builtin.assert:
+        that:
+          - synology_snmp_target is defined
+          - (synology_snmp_http is defined) or (synology_snmp_socket is defined)
+          - synology_snmp_store_prefix is defined
+          - synology_snmp_user_name is defined
+          - synology_snmp_auth_pass is defined
+          - synology_snmp_priv_pass is defined
+          - synology_snmp_disks_key is defined
+          - synology_snmp_volumes_key is defined
+          - synology_snmp_system_key is defined
+        fail_msg: >-
+          {{ inventory_hostname }} is missing synology_snmp_* vars. Add them to
+          host_vars/{{ inventory_hostname }}.yml (see playbook header). The
+          collector speaks SNMPv3 authPriv only, so BOTH passphrases are
+          required, as is an API key for each of the three stores.
+
+    - name: Run synology-snmp collector role tasks
+      ansible.builtin.include_role:
+        name: tsstore
+        tasks_from: synology-snmp.yml

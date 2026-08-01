@@ -1,0 +1,167 @@
+---
+# synology-snmp collector deployment.
+#
+# Runs on a POLLER host (the services LXC) and writes Synology NAS health
+# over HTTP to a REMOTE ts-store (trv-srv-002). The collector reaches the NAS
+# over SNMPv3 — NOTHING is installed on the DSM box itself, which is what
+# makes this reproducible on a NAS you don't administer.
+#
+# Why SNMP and not DSM's JSON API: the web API gates nearly every useful read
+# behind an account in the `administrators` group (verified on DSM 7.3 — a
+# non-admin gets error 105, plus a silently filtered package list). SNMPv3
+# needs no DSM account and returns strictly more, including per-disk health
+# and UPS state.
+#
+# The three target stores are created/keyed/schema'd by the tsstore role on
+# the ts-store server (via tsstore_server_stores) — NOT here.
+#
+# Like docker-stats, the binary lives in the ts-store repo under
+# examples/synology-snmp and is not a release asset, so it is built locally
+# and pushed. It is a SEPARATE Go module (it needs gosnmp for SNMPv3/USM), so
+# the build runs from inside the example dir.
+#
+# Required vars (set by playbooks/synology-snmp-deploy.yml / host_vars):
+#   synology_snmp_target        NAS hostname or IP
+#   synology_snmp_user          SNMPv3 username (vault ref)
+#   synology_snmp_auth_pass     SNMPv3 auth passphrase (vault ref)
+#   synology_snmp_priv_pass     SNMPv3 privacy passphrase (vault ref)
+#   synology_snmp_http          ts-store HTTP URL
+#   synology_snmp_store_prefix  store prefix -> <prefix>-{disks,volumes,system}
+#   synology_snmp_disks_key / _volumes_key / _system_key   API keys (vault refs)
+# Optional: synology_snmp_interval (60)
+
+- name: Validate synology-snmp SNMP credentials are configured
+  ansible.builtin.assert:
+    that:
+      - synology_snmp_target is defined and (synology_snmp_target | length) > 0
+      - synology_snmp_user is defined and (synology_snmp_user | length) > 0
+      - synology_snmp_auth_pass is defined and (synology_snmp_auth_pass | length) > 0
+      - synology_snmp_priv_pass is defined and (synology_snmp_priv_pass | length) > 0
+    fail_msg: >-
+      synology-snmp requires synology_snmp_target plus the SNMPv3 user and both
+      passphrases (auth + privacy). Store them in the vault — the collector
+      only speaks authPriv, so all three are mandatory.
+
+- name: Validate synology-snmp store keys are configured
+  ansible.builtin.assert:
+    that:
+      - synology_snmp_disks_key is defined and (synology_snmp_disks_key | length) > 0
+      - synology_snmp_volumes_key is defined and (synology_snmp_volumes_key | length) > 0
+      - synology_snmp_system_key is defined and (synology_snmp_system_key | length) > 0
+    fail_msg: >-
+      synology-snmp writes three stores and needs an API key for each
+      (disks/volumes/system). Add the vault refs — see host_vars.
+
+- name: Validate synology-snmp has a ts-store target (http or socket)
+  ansible.builtin.assert:
+    that:
+      - (synology_snmp_http is defined and (synology_snmp_http | length) > 0) or
+        (synology_snmp_socket is defined and (synology_snmp_socket | length) > 0)
+    fail_msg: >-
+      synology-snmp needs either synology_snmp_http (remote ts-store) or
+      synology_snmp_socket (local ts-store on the poller host).
+
+- name: Detect control-node Go toolchain
+  ansible.builtin.command: go version
+  delegate_to: localhost
+  run_once: true
+  register: synology_snmp_go
+  changed_when: false
+  failed_when: synology_snmp_go.rc != 0
+
+- name: Determine target architecture suffix
+  ansible.builtin.set_fact:
+    synology_snmp_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+
+# Built from INSIDE the example dir: synology-snmp is its own Go module, so a
+# `./examples/...` build from the repo root would not resolve gosnmp.
+- name: Build synology-snmp binary locally
+  ansible.builtin.command:
+    cmd: >-
+      go build -ldflags=-w -ldflags=-s
+      -o {{ synology_snmp_build_dir }}/synology-snmp-linux-{{ synology_snmp_arch }} .
+    chdir: "{{ synology_snmp_src_dir }}"
+  environment:
+    GOOS: linux
+    GOARCH: "{{ synology_snmp_arch }}"
+    CGO_ENABLED: "0"
+  delegate_to: localhost
+  run_once: true
+  changed_when: true
+
+- name: Create synology-snmp service user
+  ansible.builtin.user:
+    name: "{{ synology_snmp_user }}"
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+# Socket mode only: the collector must read the ts-store socket, which is
+# owned by the tsstore group.
+- name: Add synology-snmp user to tsstore group (socket mode)
+  ansible.builtin.user:
+    name: "{{ synology_snmp_user }}"
+    groups: "{{ tsstore_group }}"
+    append: true
+  become: true
+  when: synology_snmp_socket is defined and (synology_snmp_socket | length) > 0
+
+- name: Create tsstore config dir (for the env file)
+  ansible.builtin.file:
+    path: "{{ tsstore_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Install synology-snmp binary
+  ansible.builtin.copy:
+    src: "{{ synology_snmp_build_dir }}/synology-snmp-linux-{{ synology_snmp_arch }}"
+    dest: "{{ synology_snmp_bin }}"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  notify: Restart synology-snmp
+
+# Every secret goes in the env file, never in the unit's ExecStart — argv is
+# world-readable via `ps`. This covers the SNMP passphrases as well as the
+# three store keys.
+- name: Create synology-snmp environment file (SNMP creds + three API keys)
+  ansible.builtin.copy:
+    content: |
+      SNMP_USER={{ synology_snmp_user_name }}
+      SNMP_AUTH_PASS={{ synology_snmp_auth_pass }}
+      SNMP_PRIV_PASS={{ synology_snmp_priv_pass }}
+      TSSTORE_DISKS_KEY={{ synology_snmp_disks_key }}
+      TSSTORE_VOLUMES_KEY={{ synology_snmp_volumes_key }}
+      TSSTORE_SYSTEM_KEY={{ synology_snmp_system_key }}
+    dest: "{{ tsstore_config_dir }}/synology-snmp.env"
+    owner: root
+    group: "{{ synology_snmp_user }}"
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart synology-snmp
+
+- name: Create synology-snmp systemd service
+  ansible.builtin.template:
+    src: synology-snmp.service.j2
+    dest: /etc/systemd/system/synology-snmp.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart synology-snmp
+
+- name: Enable and start synology-snmp
+  ansible.builtin.systemd:
+    name: synology-snmp
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

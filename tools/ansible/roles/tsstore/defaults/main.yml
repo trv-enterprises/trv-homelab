@@ -67,3 +67,26 @@ docker_stats_container_interval: 20
 docker_stats_daemon_interval: 120
 # docker_stats_http / _container_store / _daemon_store / _container_key /
 # _daemon_key have no safe defaults — the playbook or host_vars must set them.
+
+# ── synology-snmp collector (tasks/synology-snmp.yml) ──────────────────────
+# Deployed on a POLLER host (services LXC) via
+# playbooks/synology-snmp-deploy.yml. Polls a Synology NAS over SNMPv3 and
+# writes to a remote ts-store over HTTP. Nothing is installed on the NAS.
+#
+# NOTE the two distinct "user" vars — they are unrelated and easy to confuse:
+#   synology_snmp_user       the LOCAL unix service account on the poller host
+#   synology_snmp_user_name  the SNMPv3 security name on the NAS (vault ref)
+synology_snmp_user: synology-snmp
+synology_snmp_bin: /usr/local/bin/synology-snmp
+# examples/synology-snmp is a SEPARATE Go module (needs gosnmp for SNMPv3
+# USM), so the build must run from inside this dir, not from the repo root.
+synology_snmp_src_dir: "{{ playbook_dir }}/../../../../ts-store/examples/synology-snmp"
+synology_snmp_build_dir: "{{ playbook_dir }}/../../../../ts-store/examples/synology-snmp"
+# Poll interval in seconds. Override per host in host_vars, or at the command
+# line with -e synology_snmp_interval=<n> (make deploy-synology-snmp
+# SYNOLOGY_SNMP_INTERVAL=<n>). Disk temps and RAID state move slowly; 60s is
+# a third the storage of 20s for no loss of signal.
+synology_snmp_interval: 60
+# synology_snmp_target / _http / _store_prefix / _user_name / _auth_pass /
+# _priv_pass / _disks_key / _volumes_key / _system_key have no safe defaults —
+# the playbook or host_vars must set them.

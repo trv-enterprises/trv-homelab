@@ -153,3 +153,73 @@ tsstore_collector_store_specs:
   simulators-docker-daemon: *docker_daemon_spec
   trv-srv-001-docker-containers: *docker_containers_spec
   trv-srv-001-docker-daemon: *docker_daemon_spec
+
+  # synology-snmp collector stores (ts-store examples/synology-snmp). The
+  # collector runs on the services LXC and polls the NAS over SNMPv3, then
+  # writes REMOTELY over HTTP to the trv-srv-002 store. Nothing is installed
+  # on the NAS itself.
+  #
+  # Naming: <nas-host>-{disks,volumes,system}, same <host>-<stream> convention
+  # as the docker stores, so several NAS devices can share one ts-store.
+  #
+  # SHAPE: SNMP tables are flat OID columns, not nested arrays, so a table
+  # walk becomes TALL rows keyed by a discriminator — `disk` and `volume`
+  # here, exactly like `container` in the docker stores. Adding or replacing
+  # a disk needs NO schema change; it just appears as rows with a new `disk`
+  # value. The system stream is WIDE: one row per poll.
+  #
+  # ENUMS ARE RAW INTEGERS ON PURPOSE. status/health/*_status are stored as
+  # the integer SNMP returns, never a decoded string. Synology extends these
+  # enums between releases without reissuing the MIB bundle (the 2022 MIB
+  # caps raidStatus at Integer32(1..12); the 2025 guide documents 20 states,
+  # including the SHR-specific 18 and 20 — and this NAS runs SHR-2). A string
+  # field would need a retype on every such addition, and a retype means
+  # recreating the store and losing history. Decode at read time instead:
+  # trv-homelab/edge/synology-snmp/oid-map.yml carries the enum tables.
+  nas-syn-002-disks: &synology_disks_spec
+    type: schema
+    blocks: 20000
+    schema:
+      fields:
+        - {index: 1, name: "disk",      type: "string"}
+        - {index: 2, name: "model",     type: "string"}
+        - {index: 3, name: "disk_type", type: "string"}
+        - {index: 4, name: "status",    type: "int32"}
+        - {index: 5, name: "temp_c",    type: "int32"}
+        - {index: 6, name: "role",      type: "string"}
+        - {index: 7, name: "health",    type: "int32"}
+  nas-syn-002-volumes: &synology_volumes_spec
+    type: schema
+    blocks: 10000
+    schema:
+      fields:
+        - {index: 1, name: "volume",       type: "string"}
+        - {index: 2, name: "status",       type: "int32"}
+        # Counter64 bytes — int64, not int32: an 8 TB volume overflows int32
+        # by three orders of magnitude.
+        - {index: 3, name: "free_bytes",   type: "int64"}
+        - {index: 4, name: "total_bytes",  type: "int64"}
+        - {index: 5, name: "hotspare_cnt", type: "int32"}
+  nas-syn-002-system: &synology_system_spec
+    type: schema
+    blocks: 10000
+    schema:
+      fields:
+        - {index: 1,  name: "system_status",   type: "int32"}
+        - {index: 2,  name: "temp_c",          type: "int32"}
+        - {index: 3,  name: "power_status",    type: "int32"}
+        - {index: 4,  name: "fan_system",      type: "int32"}
+        - {index: 5,  name: "fan_cpu",         type: "int32"}
+        - {index: 6,  name: "upgrade_avail",   type: "int32"}
+        # UPS: status is a DisplayString ("OL"), NOT an enum. The two
+        # percentages arrive as ASN.1 Opaque-wrapped floats.
+        - {index: 7,  name: "ups_status",      type: "string"}
+        - {index: 8,  name: "ups_load_pct",    type: "float64"}
+        - {index: 9,  name: "ups_battery_pct", type: "float64"}
+        # laLoadInt is load average x100; the collector divides before write.
+        - {index: 10, name: "load1",           type: "float64"}
+        - {index: 11, name: "load5",           type: "float64"}
+        - {index: 12, name: "load15",          type: "float64"}
+        - {index: 13, name: "mem_total_kb",    type: "int64"}
+        - {index: 14, name: "mem_avail_kb",    type: "int64"}
+        - {index: 15, name: "mem_cached_kb",   type: "int64"}

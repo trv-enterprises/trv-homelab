@@ -1,0 +1,43 @@
+[Unit]
+Description=synology-snmp collector (ts-store) — polls {{ synology_snmp_target }} over SNMPv3
+Documentation=https://github.com/trv-enterprises/ts-store/tree/main/examples/synology-snmp
+# Polls a REMOTE NAS over SNMP and writes to a REMOTE ts-store, so it depends
+# only on the network — no local docker.service, and no local tsstore.service
+# unless running in socket mode.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ synology_snmp_user }}
+{% if synology_snmp_socket is defined and synology_snmp_socket | length > 0 %}
+SupplementaryGroups={{ tsstore_group }}
+{% endif %}
+
+# Holds the SNMPv3 passphrases and the three store API keys. Deliberately NOT
+# passed as flags: argv is world-readable via `ps`.
+EnvironmentFile={{ tsstore_config_dir }}/synology-snmp.env
+ExecStart={{ synology_snmp_bin }} \
+    -target {{ synology_snmp_target }} \
+{% if synology_snmp_socket is defined and synology_snmp_socket | length > 0 %}
+    -socket {{ synology_snmp_socket }} \
+{% else %}
+    -http {{ synology_snmp_http }} \
+{% endif %}
+    -store-prefix {{ synology_snmp_store_prefix }} \
+    -interval {{ synology_snmp_interval | default(60) }}
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Hardening: this process only needs outbound UDP/TCP. It reads one env file
+# and writes nothing to disk.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
