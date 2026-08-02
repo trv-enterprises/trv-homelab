@@ -153,6 +153,12 @@ tsstore_collector_store_specs:
   simulators-docker-daemon: *docker_daemon_spec
   trv-srv-001-docker-containers: *docker_containers_spec
   trv-srv-001-docker-daemon: *docker_daemon_spec
+  # Synology NAS. Same two schemas as every other docker host — the collector
+  # is identical, only its packaging differs (a container under DSM Container
+  # Manager rather than a systemd unit, because DSM has no `docker` group for
+  # a non-root service to join).
+  nas-syn-002-docker-containers: *docker_containers_spec
+  nas-syn-002-docker-daemon: *docker_daemon_spec
 
   # synology-snmp collector stores (ts-store examples/synology-snmp). The
   # collector runs on the services LXC and polls the NAS over SNMPv3, then
