@@ -1,0 +1,22 @@
+[Unit]
+Description=Shelly H&T kitchen sensor MQTT collector (kitchen-env store)
+After=network.target tsstore.service
+# Same lifecycle coupling as the other collectors: stop with tsstore,
+# restart when tsstore restarts.
+BindsTo=tsstore.service
+PartOf=tsstore.service
+
+[Service]
+Type=simple
+User=tsstore
+Group=tsstore
+EnvironmentFile=/etc/tsstore/shelly-ht-kitchen.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /usr/local/bin/shelly-ht-mqtt-to-tsstore.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
