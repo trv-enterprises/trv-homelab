@@ -120,12 +120,45 @@
   changed_when: false
   failed_when: false
 
+# Adopt the shared simulator key into ts-store's central key REGISTRY.
+#
+# Before ts-store #138 each store carried its own keys.json and this role wrote
+# those files directly. Post-#138 the registry (/data/keys.registry.json) is
+# authoritative and per-store keys.json files are ignored, so the old approach
+# silently produced a key with no grants — every schema-reconcile call 403'd
+# ("API key lacks read access") and the deploy failed. Adopting registers the
+# operator-minted key with real grants; the plaintext goes in over stdin so it
+# never lands in argv or the process table.
+#
+# Wildcard grant: this is an isolated simulators container holding only
+# synthetic data, and a glob means new sim stores need no key work at all.
+#
+# Idempotent: re-adopting an existing key exits non-zero with "already exists",
+# which is a no-op, so the task tolerates it. Any OTHER failure is real and
+# should stop the deploy.
+- name: Adopt the shared simulator key into the ts-store key registry
+  ansible.builtin.shell:
+    cmd: >
+      printf '%s' '{{ simulators_tsstore_api_key }}'
+      | docker exec -i simulators-tsstore
+      tsstore key create --key-file - --grant 'read,write,manage:*'
+      --note 'Shared simulator key (Ansible)'
+  register: key_adopt
+  changed_when: key_adopt.rc == 0
+  failed_when: >
+    key_adopt.rc != 0 and
+    ('already exists' not in (key_adopt.stderr | default('')) and
+     'already exists' not in (key_adopt.stdout | default('')))
+  no_log: true
+
 - name: Get existing stores
   ansible.builtin.uri:
     url: "http://localhost:{{ tsstore_port }}/api/stores"
     method: GET
     headers:
-      X-Admin-Key: "{{ simulators_tsstore_admin_key }}"
+      # The listing requires a store key (ts-store #138) — the admin key is the
+      # server tier and holds no grants, so it is refused here by design.
+      X-API-Key: "{{ simulators_tsstore_api_key }}"
     return_content: true
   register: stores_response
   ignore_errors: true
@@ -145,64 +178,28 @@
       index_block_size: 4096
     status_code: [200, 201, 409]
   loop: "{{ simulators_tsstore_stores }}"
-  when: stores_response is failed or stores_response.json.stores is not defined or item not in stores_response.json.stores
+  # Entries are objects since ts-store #152 ({name, data_type, role, access}),
+  # so map to names — comparing a name against an object never matches, which
+  # made this task attempt a create (harmless 409) on every run.
+  when: >
+    stores_response is failed or
+    stores_response.json.stores is not defined or
+    item not in (stores_response.json.stores | map(attribute='name') | list)
   register: store_creation
 
-# Use Jinja's hash('sha256') filter, NOT a shell `sha256sum` pipe: the command
-# module runs without a shell, so the pipe would be captured literally (it was —
-# producing a garbage hash like "tsstore_...|sha256sum|awk{print $1}").
-- name: Compute shared API key hash
-  ansible.builtin.set_fact:
-    simulators_api_key_hash: "{{ simulators_tsstore_api_key | hash('sha256') }}"
-  no_log: true
-
-- name: Write shared API key to new location stores
-  ansible.builtin.copy:
-    dest: /tmp/tsstore-keys-{{ item.item }}.json
-    content: |
-      {
-        "store_name": "{{ item.item }}",
-        "keys": [
-          {
-            "id": "{{ simulators_tsstore_api_key[8:16] }}",
-            "hash": "{{ simulators_api_key_hash }}",
-            "created_at": "{{ ansible_facts.date_time.iso8601 }}",
-            "note": "Shared key via Ansible deploy"
-          }
-        ]
-      }
-    mode: '0600'
-  loop: "{{ store_creation.results }}"
-  when: item.changed | default(false)
-
-- name: Copy location-store key files into ts-store container
-  ansible.builtin.command:
-    cmd: docker cp /tmp/tsstore-keys-{{ item.item }}.json simulators-tsstore:/data/{{ item.item }}/keys.json
-  loop: "{{ store_creation.results }}"
-  when: item.changed | default(false)
-
-# docker cp lands the file root-owned; ts-store runs as `tsstore` and must be
-# able to read keys.json (a root-owned 0600 file → 401 "authentication failed").
-- name: Fix location-store keys.json ownership
-  ansible.builtin.command:
-    cmd: docker exec -u root simulators-tsstore chown tsstore:tsstore /data/{{ item.item }}/keys.json
-  loop: "{{ store_creation.results }}"
-  when: item.changed | default(false)
-
-- name: Clean up temporary location-store key files
-  ansible.builtin.file:
-    path: /tmp/tsstore-keys-{{ item.item }}.json
-    state: absent
-  loop: "{{ store_creation.results }}"
-  when: item.changed | default(false)
+# NOTE: per-store keys.json writing lived here until ts-store #138 moved key
+# storage into the central registry (/data/keys.registry.json). Those files are
+# ignored now — the shared key is adopted once, above, with a wildcard grant
+# that covers every store this role creates. Nothing per-store to do.
 
 # --- Combined "tidy" schema store(s) -----------------------------------------
-# Created as type=schema. Unlike the location stores above, the schema-store
-# handling is driven by ON-DISK STATE rather than the create task's `changed`
-# flag, so it is fully idempotent and self-healing: ts-store auto-generates a
-# random "Initial key" in keys.json on store creation (which would 401 our
-# shared-key writer), so we always reconcile keys.json to the shared-key hash
-# when it differs, and apply the schema whenever the store has none yet.
+# Created as type=schema. Schema application below is driven by ON-DISK STATE
+# rather than the create task's `changed` flag, so it stays idempotent and
+# self-healing: the schema is applied whenever the store has none yet.
+#
+# ts-store still mints a random "Initial key" per created store, but that is
+# now just another registry entry — it does not shadow or conflict with the
+# shared key adopted above, which carries its own grants.
 
 # Create the schema store via the API. The type field is `data_type` (NOT
 # `type`) — the same key the dashboard's ts-store client uses. ts-store rejects
@@ -226,73 +223,19 @@
   loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
   loop_control:
     label: "{{ item.key }}"
-  when: stores_response is failed or stores_response.json.stores is not defined or item.key not in stores_response.json.stores
-
-- name: Read existing schema-store keys.json (if any)
-  ansible.builtin.command:
-    cmd: docker exec simulators-tsstore cat /data/{{ item.key }}/keys.json
-  loop: "{{ simulators_tsstore_schema_stores | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}"
-  register: schema_keys_existing
-  changed_when: false
-  failed_when: false
-
-- name: Reconcile schema-store keys.json to the shared key
-  ansible.builtin.copy:
-    dest: /tmp/tsstore-keys-{{ item.item.key }}.json
-    content: |
-      {
-        "store_name": "{{ item.item.key }}",
-        "keys": [
-          {
-            "id": "{{ simulators_tsstore_api_key[8:16] }}",
-            "hash": "{{ simulators_api_key_hash }}",
-            "created_at": "{{ ansible_facts.date_time.iso8601 }}",
-            "note": "Shared key via Ansible deploy"
-          }
-        ]
-      }
-    mode: '0600'
-  loop: "{{ schema_keys_existing.results }}"
-  loop_control:
-    label: "{{ item.item.key }}"
   when: >
-    item.rc != 0 or
-    (item.stdout | from_json).keys[0].hash | default('') != simulators_api_key_hash
-  register: schema_keys_written
+    stores_response is failed or
+    stores_response.json.stores is not defined or
+    item.key not in (stores_response.json.stores | map(attribute='name') | list)
 
-- name: Copy reconciled schema-store key files into ts-store container
-  ansible.builtin.command:
-    cmd: docker cp /tmp/tsstore-keys-{{ item.item.item.key }}.json simulators-tsstore:/data/{{ item.item.item.key }}/keys.json
-  loop: "{{ schema_keys_written.results }}"
-  loop_control:
-    label: "{{ item.item.item.key | default('skipped') }}"
-  when: not (item.skipped | default(false))
-
-# Same ownership fix as the location stores — docker cp lands root-owned.
-- name: Fix schema-store keys.json ownership
-  ansible.builtin.command:
-    cmd: docker exec -u root simulators-tsstore chown tsstore:tsstore /data/{{ item.item.item.key }}/keys.json
-  loop: "{{ schema_keys_written.results }}"
-  loop_control:
-    label: "{{ item.item.item.key | default('skipped') }}"
-  when: not (item.skipped | default(false))
-
-- name: Clean up temporary schema-store key files
-  ansible.builtin.file:
-    path: /tmp/tsstore-keys-{{ item.item.item.key }}.json
-    state: absent
-  loop: "{{ schema_keys_written.results }}"
-  loop_control:
-    label: "{{ item.item.item.key | default('skipped') }}"
-  when: not (item.skipped | default(false))
-
-- name: Restart ts-store to reload keys
+# Previously this restarted ts-store so it would re-read per-store keys.json
+# files. The registry is consulted live on every request (the CLI writes it,
+# the server re-reads on change), so an adopted key needs no restart at all.
+- name: Restart ts-store after creating stores
   ansible.builtin.command:
     cmd: docker compose restart tsstore
     chdir: "{{ simulators_deploy_dir }}"
-  when: store_creation.changed or (schema_keys_written.changed | default(false))
+  when: store_creation.changed
 
 - name: Wait for ts-store to be healthy after key reload
   ansible.builtin.command:
@@ -302,7 +245,7 @@
   retries: 15
   delay: 2
   changed_when: false
-  when: store_creation.changed or (schema_keys_written.changed | default(false))
+  when: store_creation.changed
 
 # Apply the schema, authenticating with the store's own (now shared) API key —
 # the admin key is rejected by this endpoint. Idempotent: a schema-type store
