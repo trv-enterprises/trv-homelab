@@ -54,7 +54,7 @@ services:
       - mosquitto
 
   alert-engine:
-    image: ghcr.io/trv-enterprises/alert-engine:latest
+    image: ghcr.io/trv-enterprises/alert-engine:{{ alert_engine_version | default("latest") }}
     restart: unless-stopped
     volumes:
       - ./rules.yaml:/etc/alert-engine/rules.yaml:ro

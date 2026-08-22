@@ -17,17 +17,19 @@ help: ## Display this help
 
 ##@ Deploy
 
+# NOTE: this target no longer ships a docker-compose.yml. The services-stack
+# Ansible role owns /opt/services/docker-compose.yml (deployed from
+# homelab-deploy). The copy that used to live here went stale in April 2026 and
+# would have reverted Mosquitto to a named-volume config (the 2026-04-11
+# persistence incident), dropped the :9883 listener, and deleted the
+# alert-engine service. Run the Ansible role to change the compose file.
 .PHONY: deploy
-deploy: ## Sync compose file + config, restart full stack
-	scp docker-compose.services.yml $(DEPLOY_USER)@$(DEPLOY_HOST):/tmp/$(COMPOSE_FILE)
-	ssh $(DEPLOY_USER)@$(DEPLOY_HOST) '\
-		sudo mv /tmp/$(COMPOSE_FILE) $(REMOTE_DIR)/$(COMPOSE_FILE) && \
-		cd $(REMOTE_DIR) && \
-		sudo docker compose up -d'
+deploy: ## Sync Z2M config and restart the container
+	ssh $(DEPLOY_USER)@$(DEPLOY_HOST) 'cd $(REMOTE_DIR) && sudo docker compose up -d zigbee2mqtt'
 	@echo "Waiting for zigbee2mqtt to create initial config..."
 	@sleep 5
 	$(MAKE) deploy-config
-	@echo "Stack deployed"
+	@echo "Deployed"
 
 .PHONY: deploy-config
 deploy-config: ## Sync Z2M config only, restart zigbee2mqtt container (WARNING: overwrites network_key)
