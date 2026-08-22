@@ -6,12 +6,20 @@
  *   - Shelly plugs (state extraction from JSON)
  *   - Soil moisture sensors (moisture, battery)
  *   - Contact sensors / garage door (contact state)
+ *   - Occupancy sensors (motion night light)
  */
 
 'use strict';
 
 function init(params) {
   const { log, config, publish, notify } = params;
+
+  // mqttthing initialises the codec once PER ACCESSORY and passes that
+  // accessory's config here. The per-message `info` object is only
+  // { topic, property, extendedTopic } — it carries NO name — so any
+  // per-accessory behaviour must be decided from `config` at init time.
+  // Keying on info.name silently never matches (it is always undefined).
+  const isOwnershipSwitch = config.name === 'Nightlight Auto';
 
   // ── XY ↔ HS color conversion ──────────────────────────────────
   // CIE 1931 XY to Hue/Saturation (simplified, good enough for Hue bulbs)
@@ -95,6 +103,14 @@ function init(params) {
 
   // ── Decode: Z2M JSON → HomeKit values ─────────────────────────
   function decode(message, info, output) {
+    // The automation-ownership switch reads a bare string on its own state
+    // topic ("automation" | "override" | "parked"), not Z2M device JSON, so it
+    // is handled before the JSON parse below. The switch shows ON whenever
+    // automation is not parked.
+    if (isOwnershipSwitch) {
+      return String(message).trim() !== 'parked' ? 1 : 0;
+    }
+
     let payload;
     try {
       payload = JSON.parse(message);
@@ -109,8 +125,14 @@ function init(params) {
       return payload.state === 'ON';
     }
 
-    // Brightness: Z2M 0-254 → HomeKit 0-100
+    // Brightness: Z2M 0-254 → HomeKit 0-100.
+    // Some devices (e.g. the Third Reality night light) omit brightness while
+    // off. Returning NaN makes mqttthing reject the update, so leave the
+    // characteristic untouched by returning undefined instead.
     if (prop === 'brightness') {
+      if (typeof payload.brightness !== 'number') {
+        return undefined;
+      }
       return Math.round((payload.brightness / 254) * 100);
     }
 
@@ -136,13 +158,20 @@ function init(params) {
       return lastSaturation;
     }
 
-    // Color temperature: Z2M uses mireds, HomeKit uses mireds (140-500)
+    // Color temperature: Z2M uses mireds, HomeKit uses mireds (140-500).
+    // Absent on devices that report no color temp; leave untouched.
     if (prop === 'colorTemperature') {
+      if (typeof payload.color_temp !== 'number') {
+        return undefined;
+      }
       return payload.color_temp;
     }
 
-    // Humidity (soil moisture sensors)
+    // Humidity (soil moisture sensors). Absent on non-measurement reports.
     if (prop === 'currentRelativeHumidity') {
+      if (typeof payload.soil_moisture !== 'number') {
+        return undefined;
+      }
       return payload.soil_moisture;
     }
 
@@ -156,6 +185,11 @@ function init(params) {
       return payload.contact === false ? 1 : 0; // false = open = detected
     }
 
+    // Occupancy sensor (motion night light)
+    if (prop === 'occupancyDetected') {
+      return payload.occupancy === true ? 1 : 0;
+    }
+
     return message;
   }
 
@@ -165,6 +199,11 @@ function init(params) {
 
     // On/Off
     if (prop === 'on') {
+      // The automation-ownership switch speaks plain true/false on its own
+      // enable topic, not Z2M device JSON.
+      if (isOwnershipSwitch) {
+        return message ? 'true' : 'false';
+      }
       return JSON.stringify({ state: message ? 'ON' : 'OFF' });
     }
 
