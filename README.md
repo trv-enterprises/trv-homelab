@@ -20,7 +20,7 @@ trv-homelab/
 │   ├── zigbee2mqtt/        # Zigbee2MQTT (services LXC, Docker Compose)
 │   ├── homebridge/         # Homebridge + mqttthing (HomeKit bridge)
 │   ├── weather-poller/     # Weather data poller (Go, Visual Crossing API)
-│   ├── sensor-alert-engine/# Alert rules engine for sensor thresholds
+│   ├── sensor-alert-engine/# Alert + automation rules engine (see its README)
 │   ├── caseta-bridge/      # Lutron Caseta MQTT bridge
 │   ├── mosquitto/          # MQTT broker deployment
 │   ├── tsstore/            # ts-store generic deployment
