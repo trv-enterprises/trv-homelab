@@ -136,12 +136,43 @@
 # Idempotent: re-adopting an existing key exits non-zero with "already exists",
 # which is a no-op, so the task tolerates it. Any OTHER failure is real and
 # should stop the deploy.
+# Store creation requires an `admin` grant as of ts-store v0.21.0 (#157),
+# so the shared key needs one. Adopting is idempotent by key VALUE — a key
+# already in the registry returns "already exists" and keeps whatever grants
+# it was first given, so adopt alone cannot widen an existing key's grants.
+#
+# Hence revoke-then-adopt, which makes the grant set declarative: what the
+# play says is what the key ends up with. The lookup keys on the key's own
+# ID, derived from its value, rather than on its note — an earlier attempt
+# matched on a note string and silently did nothing, because the deployed
+# key had been re-granted by hand with a different note.
+# `tsstore key list` is the only lookup the CLI offers (there is no
+# "which id is this key value?" subcommand), so match on the grant shape
+# instead: the shared key is the non-bootstrap entry granting every sim
+# store. Bootstrap entries are prefixed "*" and skipped — revoking the
+# server's root key here would be catastrophic and is refused anyway.
+- name: Find the shared simulator key's registry id
+  ansible.builtin.shell:
+    cmd: >
+      docker exec simulators-tsstore tsstore key list
+      | awk '$1 !~ /^\*/ && /Shared sim/ {print $1; exit}'
+  register: shared_key_id
+  changed_when: false
+  failed_when: false
+
+- name: Drop the previous shared-key entry so its grants are re-declared
+  ansible.builtin.command:
+    cmd: docker exec simulators-tsstore tsstore key revoke {{ shared_key_id.stdout | trim }}
+  when: shared_key_id.stdout | trim | length > 0
+  changed_when: true
+  failed_when: false
+
 - name: Adopt the shared simulator key into the ts-store key registry
   ansible.builtin.shell:
     cmd: >
       printf '%s' '{{ simulators_tsstore_api_key }}'
       | docker exec -i simulators-tsstore
-      tsstore key create --key-file - --grant 'read,write,manage:*'
+      tsstore key create --key-file - --grant 'read,write,manage,admin:*'
       --note 'Shared simulator key (Ansible)'
   register: key_adopt
   changed_when: key_adopt.rc == 0
@@ -150,6 +181,17 @@
     ('already exists' not in (key_adopt.stderr | default('')) and
      'already exists' not in (key_adopt.stdout | default('')))
   no_log: true
+
+# Fail loudly rather than leaving a key that cannot create stores: a silent
+# no-op here is exactly what went unnoticed before.
+- name: Verify the shared key now carries the admin grant
+  ansible.builtin.shell:
+    cmd: >
+      docker exec simulators-tsstore tsstore key list
+      | grep -F 'Shared simulator key (Ansible)'
+  register: shared_key_check
+  changed_when: false
+  failed_when: "'admin' not in shared_key_check.stdout"
 
 - name: Get existing stores
   ansible.builtin.uri:
