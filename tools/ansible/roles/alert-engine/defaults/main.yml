@@ -1,0 +1,9 @@
+---
+# Third Reality on-device rule configuration, applied via the Z2M bridge.
+# Override per deployment in host_vars. Empty by default so the role is a
+# no-op for deployments with no such devices.
+#
+# on_seconds: 0 parks the on-device rule so the automation engine owns the
+# device outright. Give it a non-zero value only to deliberately hand control
+# back to the device (e.g. as a broker-outage fallback).
+zigbee_device_rules: []

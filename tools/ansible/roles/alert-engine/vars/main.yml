@@ -7,3 +7,6 @@ alert_engine_version: latest
 
 # Deployment directory (shared services stack)
 services_deploy_dir: /opt/services
+
+# Mosquitto container used to reach the Z2M bridge request topics.
+mosquitto_container: services-mosquitto-1

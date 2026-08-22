@@ -1,0 +1,42 @@
+---
+# Third Reality private-cluster ("local rule processor") configuration.
+#
+# The 3RSNL02043Z night light can drive its own light from its own motion
+# sensor, entirely inside the device, via manufacturer cluster 0xFC00
+# (manufacturer code 0x130D). Z2M knows the attribute names but wires no
+# converter to them, so they are unreachable through <device>/set and must be
+# written with the bridge's raw ZCL API.
+#
+#   coldDownTime    0x0003  cooldown before motion can retrigger (seconds)
+#   localRoutinTime 0x0004  how long the light stays on after motion (seconds)
+#   luxThreshold    0x0005  only run the local rule below this ambient level
+#
+# Setting localRoutinTime to 0 parks the on-device rule so it cannot race the
+# automation engine. The device does NOT answer reads on this cluster, so its
+# configuration cannot be queried back -- this task is the source of truth and
+# re-asserts on every deploy, which also repairs drift after a power cycle or
+# an OTA.
+
+- name: Configure night light on-device rule
+  vars:
+    payload:
+      id: "{{ item.device }}"
+      endpoint: 1
+      cluster: 64512          # 0xFC00
+      options:
+        manufacturerCode: 4877  # 0x130D
+      payload:
+        coldDownTime: "{{ item.cooldown_seconds }}"
+        localRoutinTime: "{{ item.on_seconds }}"
+        luxThreshold: "{{ item.lux_threshold }}"
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ mosquitto_container }}
+      mosquitto_pub -h localhost
+      -t zigbee2mqtt/bridge/request/device/write
+      -m '{{ payload | to_json }}'
+  loop: "{{ zigbee_device_rules }}"
+  loop_control:
+    label: "{{ item.device }} (on={{ item.on_seconds }}s)"
+  become: true
+  changed_when: true

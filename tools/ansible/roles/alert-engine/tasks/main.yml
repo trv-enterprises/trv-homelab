@@ -56,3 +56,7 @@
       Rules: {{ alert_engine_rules_file }}
       Recent logs:
       {{ engine_logs.stdout }}
+
+- name: Configure Zigbee on-device rules
+  ansible.builtin.include_tasks: zigbee-device-rules.yml
+  when: zigbee_device_rules | length > 0
