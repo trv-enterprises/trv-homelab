@@ -11,11 +11,17 @@ ghcr_registry: ghcr.io/trv-enterprises
 dashboard_server_image: "{{ ghcr_registry }}/outpost-server"
 dashboard_client_image: "{{ ghcr_registry }}/outpost-client"
 
-# Default version (override with --extra-vars "dashboard_version=0.3.0")
-# Note: GHCR tags do NOT have 'v' prefix
-# 0.28.0 is the first post-rename release (matches the outpost-* image names
-# above); it is the next version after the 0.27.2 currently on prod.
-dashboard_version: 0.28.0
+# dashboard_version deliberately lives in defaults/main.yml, NOT here.
+#
+# vars/ outranks host_vars, so a version pinned here could not be overridden
+# per host — only by -e on the command line. It also went stale: this file
+# hardcoded 0.28.0 (written when prod ran 0.27.2) long after prod moved to
+# 0.50.0, so a no-argument `make deploy-dashboard` tried to DOWNGRADE prod by
+# 22 versions. It failed only because 0.28.0 had been deleted from GHCR.
+#
+# It is now empty in defaults/ = "resolve the latest GitHub release at deploy
+# time", matching the tsstore role. Pin per host in host_vars, or with
+# DASHBOARD_VERSION= / -e dashboard_version=.
 
 # Deployment directory on target
 dashboard_deploy_dir: /opt/dashboard

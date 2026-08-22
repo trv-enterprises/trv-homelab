@@ -1,6 +1,40 @@
 ---
 # Dashboard deployment tasks
 
+# Version resolution. Mirrors the tsstore role: empty dashboard_version means
+# "track the latest release", a concrete value pins. Without this, the role
+# carried a hardcoded version that went stale and silently downgraded prod.
+- name: Determine whether dashboard_version is pinned
+  ansible.builtin.set_fact:
+    dashboard_version_pinned: "{{ (dashboard_version | default('') | length) > 0 }}"
+
+- name: Resolve latest dashboard release (only when version not pinned)
+  ansible.builtin.command:
+    cmd: gh release view --repo trv-enterprises/trv-outpost --json tagName --jq .tagName
+  delegate_to: localhost
+  run_once: true
+  # Read-only lookup — must run even in --check so the resolved version is
+  # available to the (checked) template/pull tasks.
+  check_mode: false
+  register: dashboard_latest_lookup
+  changed_when: false
+  failed_when: >-
+    dashboard_latest_lookup.rc != 0 or
+    (dashboard_latest_lookup.stdout | default('') | trim | length) == 0
+  when: not dashboard_version_pinned
+
+- name: Set dashboard_version from the resolved release
+  ansible.builtin.set_fact:
+    # GHCR tags carry no 'v' prefix; GitHub release tags may. Strip it.
+    dashboard_version: "{{ dashboard_latest_lookup.stdout | trim | regex_replace('^v', '') }}"
+  when: not dashboard_version_pinned
+
+- name: Show the version being deployed
+  ansible.builtin.debug:
+    msg: >-
+      Deploying dashboard {{ dashboard_version }}
+      ({{ 'pinned' if dashboard_version_pinned else 'resolved as latest release' }})
+
 - name: Validate an Anthropic key is available for AI features
   ansible.builtin.fail:
     msg: >-

@@ -51,3 +51,14 @@ dashboard_launcher_enabled: false
 #   files/dashboard-launcher/{index.html,users.json,Caddyfile}
 dashboard_launcher_src: ""
 dashboard_launcher_image: "caddy:2-alpine"
+
+# Release version. GHCR tags do NOT carry a 'v' prefix (0.50.0, not v0.50.0).
+#
+# EMPTY = "resolve the latest GHCR release at deploy time" — an un-pinned
+# deploy tracks current rather than a hardcoded old version. Set a concrete
+# value here, in host_vars, or via -e/DASHBOARD_VERSION to PIN instead.
+#
+# This lives in defaults/ (not vars/) ON PURPOSE so host_vars can override it.
+# The previous hardcoded 0.28.0 in vars/main.yml outranked host_vars and went
+# stale, so a no-argument deploy attempted a 22-version downgrade of prod.
+dashboard_version: ""

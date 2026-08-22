@@ -1,6 +1,17 @@
 [Unit]
 Description=tsstore time-series database
 After=network.target
+# Upholds: while tsstore is active, systemd re-starts any listed unit found
+# stopped. The collectors' PartOf/BindsTo propagate stop+start on a tsstore
+# restart, but those jobs can race and leave a collector cleanly stopped —
+# a state Restart= never recovers from (observed on the 2026-08-21 upgrade:
+# shelly-ht-kitchen stalled for 21h). Requires systemd >= 249.
+{% for collector in tsstore_collectors %}
+Upholds={{ collector.name }}.service
+{% endfor %}
+{% for unit in tsstore_extra_upheld_units %}
+Upholds={{ unit }}
+{% endfor %}
 
 [Service]
 Type=simple

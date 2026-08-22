@@ -29,6 +29,13 @@ tsstore_collectors: []
 # Rendered into mqtt_connections.json inside each store's data dir.
 tsstore_mqtt_streams: []
 
+# Extra units (beyond tsstore_collectors) for tsstore.service to Upholds= —
+# collectors deployed OUTSIDE this role that still BindsTo/PartOf tsstore
+# (e.g. the hand-deployed shelly-ht-kitchen.service on trv-srv-001). Without
+# an Upholds entry, a tsstore restart can race the PartOf stop/start
+# propagation and leave such a unit cleanly stopped until manually started.
+tsstore_extra_upheld_units: []
+
 # Per-store API keys, keyed by hyphenated store name.
 # Values are typically vault references like "{{ pi001_system_stats_api_key }}".
 # The role preserves these across re-deploys via SHA-256 of the key in keys.json.
