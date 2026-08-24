@@ -50,11 +50,10 @@ Two Go modules live here. Both build to containers published on GHCR under the
 | Service | Module path | Purpose |
 |---|---|---|
 | `edge/weather-poller/` | `github.com/trv-enterprises/trv-homelab/edge/weather-poller` | Visual Crossing -> MQTT |
-| `edge/sensor-alert-engine/` | `github.com/trv-homelab/sensor-alert-engine` | Threshold alerts + actuation |
+| `edge/sensor-alert-engine/` | `github.com/trv-enterprises/trv-homelab/edge/sensor-alert-engine` | Threshold alerts + actuation |
 
-> The alert-engine module path is stale -- it predates the repo split and does
-> not match its location. Nothing imports it, so it is inert, but fix it to the
-> path-based form if you touch `go.mod`.
+Both use the path-based module name, so a module's import path matches where it
+actually lives. Keep it that way when adding a third.
 
 ### sensor-alert-engine
 
