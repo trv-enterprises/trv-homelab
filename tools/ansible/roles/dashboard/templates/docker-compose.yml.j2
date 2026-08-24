@@ -81,6 +81,19 @@ services:
       - ASSISTANT_ANTHROPIC_API_KEY={{ assistant_anthropic_api_key }}
       # Address ts-store dials back to for push-mode streaming callbacks.
       - DASHBOARD_HOST={{ lan_ip | default(ansible_host) }}:3001
+      # Scheme ts-store is told to use for that callback (ws:// vs wss://).
+      #
+      # The server cannot infer this: it terminates plain HTTP behind Caddy, so
+      # its own listener says nothing about how the outside world reaches it.
+      # Left false on a TLS box, the advertised callback stays ws:// -- and
+      # since that URL now carries the push secret (dashboard #260), the
+      # credential would travel in the clear. Not merely a scheme mismatch.
+      #
+      # Defaults to dashboard_enable_https so the TLS posture is stated once
+      # per host instead of twice: any box with HTTPS on is by definition
+      # reached over TLS. Override explicitly only for a split arrangement --
+      # e.g. TLS terminated upstream while this role's own HTTPS stays off.
+      - DASHBOARD_PUBLIC_TLS={{ dashboard_public_tls | default(dashboard_enable_https | default(false)) | string | lower }}
       # Server-wide gate that lets per-connection insecure_skip_verify take effect.
       # Required for api.rest connections to self-signed endpoints (e.g. Proxmox).
       - DASHBOARD_API_ALLOW_INSECURE_TLS={{ dashboard_api_allow_insecure_tls | default('false') }}

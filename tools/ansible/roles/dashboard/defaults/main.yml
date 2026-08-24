@@ -31,6 +31,22 @@ dashboard_enable_https: false
 # Chromium/Firefox at the handshake. Always a hostname.
 dashboard_caddy_tls_directive: ""
 
+# Whether the outside world reaches this deployment over TLS (DASHBOARD_PUBLIC_TLS).
+#
+# Decides whether the push callback advertised to ts-store is ws:// or wss://.
+# The server can't work this out for itself: it serves plain HTTP behind Caddy,
+# so its own listener says nothing about the public scheme (dashboard #260).
+#
+# Getting it wrong on a TLS box is a security bug, not a cosmetic one — the
+# callback URL carries the push secret, so a ws:// advertisement puts that
+# credential on the wire in the clear.
+#
+# Deliberately NOT set here: the template defaults it to dashboard_enable_https,
+# so a host that turns on HTTPS gets the right scheme without stating its TLS
+# posture twice. Set this explicitly ONLY when the two genuinely differ — TLS
+# terminated by something upstream while this role's own HTTPS stays off.
+# dashboard_public_tls: true
+
 # ---------------------------------------------------------------------------
 # Home-screen launcher sidecar (/launch)
 # ---------------------------------------------------------------------------
