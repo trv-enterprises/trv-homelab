@@ -42,3 +42,18 @@
     mode: '0644'
   become: true
   register: mosquitto_config_file
+
+# autoheal restarts containers that report unhealthy. It belongs to the stack
+# rather than to any one service: Docker marks health status but never acts on
+# it, so without this every healthcheck in this file is only a label on
+# `docker ps`.
+#
+# Started here because no service role owns it, and because the per-service
+# roles each run `docker compose up -d <their-service>`, which would never
+# bring it up. It restarts only containers labelled autoheal=true.
+- name: Start/update autoheal
+  ansible.builtin.command:
+    cmd: docker compose up -d autoheal
+    chdir: "{{ services_deploy_dir }}"
+  register: autoheal_up
+  changed_when: "'Started' in autoheal_up.stderr or 'Recreated' in autoheal_up.stderr"
