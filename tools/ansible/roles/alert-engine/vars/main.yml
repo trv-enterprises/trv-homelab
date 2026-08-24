@@ -2,7 +2,15 @@
 # Alert Engine deployment configuration
 
 # Image
+#
+# Duplicated in edge/sensor-alert-engine/Makefile (IMAGE), which builds and
+# pushes the tag this resolves. Change both together or the deploy pulls an
+# image the release never pushed.
 alert_engine_image: ghcr.io/trv-enterprises/alert-engine
+
+# Overridden per deploy: make deploy-alert-engine ALERT_ENGINE_VERSION=x.y.z
+# Pin an explicit tag for anything that must be reproducible or rolled back --
+# `latest` cannot be rolled back to a known-good build.
 alert_engine_version: latest
 
 # Deployment directory (shared services stack)
