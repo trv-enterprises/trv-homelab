@@ -62,6 +62,66 @@ services:
       - TZ=America/Chicago
     depends_on:
       - mosquitto
+    labels:
+      # Opt this container in to autoheal (see the autoheal service below).
+      # Without the label autoheal ignores it, so adding a healthcheck to any
+      # other service here stays purely informational until it opts in too.
+      - autoheal=true
+    # The engine can fail without exiting: the process stays up and the
+    # container reports healthy while the MQTT client is deaf. `restart:
+    # unless-stopped` is no help against that -- nothing ever exits. This
+    # check reads the verdict each heartbeat writes, so a wedged engine is
+    # restarted instead of sitting silent (2026-08-22, 2026-08-23).
+    #
+    # Both conditions must hold: the file says ok AND it was written
+    # recently. Contents alone would report the last verdict forever if the
+    # heartbeat goroutine died; mtime alone would miss a client that is up
+    # but receiving nothing.
+    #
+    # Timing is deliberately forgiving. The heartbeat writes every 5m and the
+    # engine now recovers on its own, taking up to ~40s and retrying on the
+    # next heartbeat. retries: 3 at interval: 2m means roughly 6 minutes of
+    # sustained unhealth before a restart -- long enough for self-recovery to
+    # win, short enough that a genuine wedge does not last the night. The
+    # 12m staleness bound tolerates one missed heartbeat.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          [ "$$(cat /tmp/alert-engine-health 2>/dev/null)" = "ok" ] &&
+          [ "$$(( $$(date +%s) - $$(date -r /tmp/alert-engine-health +%s) ))" -lt 720 ]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+  # Restarts containers that report unhealthy. Docker marks health status but
+  # never acts on it, so without this a healthcheck is only a label on
+  # `docker ps` -- which is exactly the gap that let a deaf alert-engine sit
+  # for fourteen hours.
+  #
+  # Scoped by label: it only touches containers carrying `autoheal=true`, so
+  # adding a healthcheck elsewhere in this stack does not silently enrol that
+  # service in automatic restarts.
+  #
+  # This needs the Docker socket, which is effectively root on the host. It is
+  # mounted read-only -- that does not remove the privilege (the API allows
+  # writes over a read-only socket file) but it does stop the container
+  # altering the socket itself. Accepted deliberately: the alternative is
+  # unattended silent failure of the automation that drives the lights.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      - TZ=America/Chicago
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      # Grace period after a container starts before it is eligible for a
+      # restart. Comfortably longer than alert-engine's start_period so a slow
+      # boot is never mistaken for a wedge.
+      - AUTOHEAL_START_PERIOD=120
+      - AUTOHEAL_INTERVAL=30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   mosquitto_data:
