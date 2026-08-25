@@ -1,0 +1,16 @@
+---
+# Ansible collections these playbooks require.
+#
+# `ansible-core` ships no collections at all, so a fresh control machine (or a
+# CI runner) cannot resolve `ansible.posix.synchronize` without this. The full
+# `ansible` package bundles them, which is why this was easy to miss: it works
+# on a workstation that installed `ansible` and fails on anything that
+# installed `ansible-core`.
+#
+# Install with:
+#   ansible-galaxy collection install -r tools/ansible/requirements.yml
+collections:
+  # ansible.posix.synchronize — rsync-backed file sync, used by the simulators
+  # and kiosk roles to push source trees to a remote host.
+  - name: ansible.posix
+    version: ">=1.5.0"

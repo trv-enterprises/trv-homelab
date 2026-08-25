@@ -165,6 +165,14 @@ jobs:
       - name: Install tools
         run: pip install --quiet ansible-core yamllint
 
+      # ansible-core ships NO collections, so `ansible.posix.synchronize`
+      # (used by the simulators and kiosk roles) is unresolvable without this
+      # and the syntax check fails. Easy to miss locally: the full `ansible`
+      # package bundles the collections, so a workstation passes while a clean
+      # runner does not. Declared in tools/ansible/requirements.yml.
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r tools/ansible/requirements.yml
+
       # Config lives at .yamllint. It is deliberately permissive — parse
       # errors fail, cosmetic style does not. See that file for why.
       - name: yamllint
