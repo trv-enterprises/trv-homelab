@@ -69,10 +69,12 @@ The engine does two distinct jobs:
   own logic cannot race. See `docs/nightlight-automation.md`.
 
 **MQTT reconnect semantics (paho) -- read before touching the connection code.**
-This has caused two multi-hour silent outages (2026-08-22, 2026-08-23), both
-with the same signature: the process stays up, the container reports healthy,
-and no commands are published because as far as the engine knows nothing has
-happened.
+Three silent outages (2026-08-22, 2026-08-23, 2026-08-25) with the same
+signature: the process stays up, the container reports healthy, and no commands
+are published because as far as the engine knows nothing has happened.
+Library-level notes that apply beyond this repo are in the global
+`paho-mqtt-go-pitfalls` memory; full detail in
+`edge/sensor-alert-engine/CLAUDE.md`.
 
 - `IsConnected()` reports paho's *intent* to hold a session, not socket health.
   A client evicted by the broker can report connected indefinitely. Prolonged
@@ -81,6 +83,10 @@ happened.
   auto-reconnect, and it transitions status asynchronously. Calling `Connect()`
   straight after it is rejected with `status can only transition to connecting
   from disconnected`, leaving the client wedged offline with no retry.
+- **A wedged client cannot be rehabilitated through the public API** -- neither
+  exported probe distinguishes `disconnecting` from `disconnected`, so waiting
+  for it to settle is not possible. Recovery builds a NEW client; a fresh one
+  starts at `disconnected`, so its `Connect()` is always legal.
 - `Connect()` does **not** replay subscriptions under CleanSession. Any
   reconnect path must resubscribe explicitly -- that is why `SubscribeAll`
   exists and why `OnConnect` calls it.
@@ -91,6 +97,41 @@ happened.
 The heartbeat exists to turn *absence* of activity into an alertable signal.
 `messages_total` counts what actually arrived from the broker; repeated
 heartbeats reporting zero while devices are known to be publishing is a stall.
+
+## CI
+
+GitHub Actions, in `.github/workflows/`:
+
+- **`pr-checks.yml`** — runs on every PR into main (and pushes to main).
+  Per-module `go build` / `go vet` / `go test -race`, `gofmt` scoped to the
+  files the PR touches, `govulncheck`, plus `yamllint` and
+  `ansible-playbook --syntax-check` over the Ansible tree.
+- **`publish-containers.yml`** — builds and pushes a service image to GHCR,
+  multi-arch (amd64 + arm64), gated on that service's tests passing.
+
+**Tags carry the service name**, because a bare `v*` cannot say which of the
+two images it means:
+
+```bash
+git tag -a alert-engine/v0.2.1 -m "..." && git push origin alert-engine/v0.2.1
+# -> ghcr.io/trv-enterprises/alert-engine:0.2.1  (+ :latest when not a prerelease)
+```
+
+A hyphenated version is treated as a prerelease and does **not** move
+`:latest` — the deploy roles default to `latest`, so an rc must not become
+what an unpinned host picks up. Existing bare `v0.2.0-rc.*` tags remain valid
+history but no longer trigger anything.
+
+`caseta-bridge` has a Dockerfile but is deliberately not published: it deploys
+as Python over rsync + systemd, and that Dockerfile is vestigial.
+
+Two Go modules live here on **different Go versions** (alert-engine 1.23,
+weather-poller 1.25.5), so every Go job resolves its toolchain from that
+module's own `go.mod`. `go build ./...` at the repo root builds nothing.
+
+`.yamllint` is deliberately permissive — it fails on parse errors, duplicate
+keys, tabs and implicit octal (a real Ansible file-mode footgun) but not on
+cosmetic style, so it does not red-light 48 pre-existing files.
 
 ## Commands
 

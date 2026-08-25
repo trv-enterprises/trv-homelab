@@ -1,0 +1,219 @@
+name: Publish Containers
+
+# Builds and pushes a service image to GHCR on a per-service tag.
+#
+# WHY THE TAG CARRIES THE SERVICE NAME
+#
+# This is a monorepo with two publishable images. A bare `v*` tag cannot say
+# which one it means — and historically it did not: every v0.2.0-rc.* tag in
+# this repo versioned alert-engine alone, while weather-poller shipped as
+# :latest from a laptop. Tagging `alert-engine/v0.2.0-rc.11` is unambiguous,
+# lets the two services version independently, and is the standard Go monorepo
+# convention (`golang.org/x/tools/gopls/v0.14.0` and friends).
+#
+#   git tag -a alert-engine/v0.2.1   -m "..." && git push origin alert-engine/v0.2.1
+#   git tag -a weather-poller/v0.1.0 -m "..." && git push origin weather-poller/v0.1.0
+#
+# The image tag drops the prefix and the leading v: alert-engine/v0.2.1 pushes
+# ghcr.io/trv-enterprises/alert-engine:0.2.1. That matches what the Ansible
+# roles already resolve (alert_engine_version / weather_poller_version) and the
+# GHCR convention of unprefixed image tags.
+#
+# Existing bare v0.2.0-rc.* tags are left alone — they are valid history, they
+# just do not trigger this workflow.
+#
+# caseta-bridge has a Dockerfile but is NOT published: it deploys as Python
+# over rsync + systemd (see edge/caseta-bridge/Makefile). Its Dockerfile is
+# vestigial. Do not add it here without changing how it deploys.
+on:
+  push:
+    tags:
+      - 'alert-engine/v*'
+      - 'weather-poller/v*'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to build'
+        required: true
+        type: choice
+        options:
+          - alert-engine
+          - weather-poller
+      tag:
+        description: 'Image tag (e.g. 0.2.1). Defaults to the branch name.'
+        required: false
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  resolve:
+    name: Resolve service and version
+    runs-on: ubuntu-latest
+    outputs:
+      service: ${{ steps.parse.outputs.service }}
+      context: ${{ steps.parse.outputs.context }}
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      # Split "<service>/v<version>" into its parts, or take them from the
+      # manual-dispatch inputs. Done in one place so the build job below has
+      # no parsing logic and no chance of the two disagreeing.
+      - name: Parse
+        id: parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            service="${{ inputs.service }}"
+            version="${{ inputs.tag }}"
+            if [ -z "$version" ]; then
+              version="${GITHUB_REF_NAME//\//-}"
+            fi
+          else
+            ref="${GITHUB_REF#refs/tags/}"       # alert-engine/v0.2.1
+            service="${ref%%/*}"                 # alert-engine
+            version="${ref#*/}"                  # v0.2.1
+            version="${version#v}"               # 0.2.1  (GHCR tags carry no v)
+          fi
+
+          # Map the service name to its build context. An unknown name must
+          # fail loudly rather than silently building nothing.
+          case "$service" in
+            alert-engine)   context="edge/sensor-alert-engine" ;;
+            weather-poller) context="edge/weather-poller" ;;
+            *)
+              echo "::error::Unknown service '$service'."
+              echo "Expected a tag like alert-engine/v0.2.1 or weather-poller/v0.1.0."
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$version" ]; then
+            echo "::error::Could not resolve a version from ref '${GITHUB_REF}'."
+            exit 1
+          fi
+
+          echo "service=$service"  >> "$GITHUB_OUTPUT"
+          echo "context=$context"  >> "$GITHUB_OUTPUT"
+          echo "version=$version"  >> "$GITHUB_OUTPUT"
+          echo "Building $service from $context as $version"
+
+  # Do not publish an image whose own tests do not pass. The build below is a
+  # separate `docker build` and would happily produce a green image from a
+  # broken tree otherwise.
+  test:
+    name: Test before publishing
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ needs.resolve.outputs.context }}/go.mod
+          cache-dependency-path: ${{ needs.resolve.outputs.context }}/go.sum
+
+      - name: go vet
+        working-directory: ${{ needs.resolve.outputs.context }}
+        run: go vet ./...
+
+      - name: go test -race
+        working-directory: ${{ needs.resolve.outputs.context }}
+        run: go test -race ./...
+
+  build-and-push:
+    name: Build and push ${{ needs.resolve.outputs.service }}
+    needs: [resolve, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # QEMU so a single runner can emit both architectures. The homelab
+      # targets are amd64 (services LXC), but arm64 costs little here and
+      # covers the Pi hosts if a service is ever deployed there — and it
+      # removes the "built on an arm64 laptop, deployed to amd64" trap that
+      # the local docker-push target has to guard against by hand.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags are written explicitly rather than via docker/metadata-action's
+      # semver patterns: those key off the git ref, which here carries the
+      # service prefix and would produce tags like "alert-engine-v0.2.1".
+      #
+      # No `latest` on a prerelease. A hyphen means prerelease under semver,
+      # and the deploy roles default to :latest — so moving latest to an rc
+      # would silently roll one out to any host that had not pinned a version.
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ needs.resolve.outputs.service }}"
+          version="${{ needs.resolve.outputs.version }}"
+          tags="${image}:${version}"
+          case "$version" in
+            *-*) echo "Prerelease ($version) — not moving :latest." ;;
+            *)   tags="${tags},${image}:latest" ;;
+          esac
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+          echo "Tags: $tags"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ needs.resolve.outputs.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.resolve.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Published \`${{ needs.resolve.outputs.service }}\`"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${{ needs.resolve.outputs.version }}\` |"
+            echo "| Context | \`${{ needs.resolve.outputs.context }}\` |"
+            echo "| Platforms | linux/amd64, linux/arm64 |"
+            echo
+            echo "Deploy from \`homelab-deploy\`:"
+            echo
+            if [ "${{ needs.resolve.outputs.service }}" = "alert-engine" ]; then
+              echo '```'
+              echo "make deploy-alert-engine ALERT_ENGINE_VERSION=${{ needs.resolve.outputs.version }}"
+              echo '```'
+            else
+              echo '```'
+              echo "make deploy-weather"
+              echo '```'
+              echo
+              echo "> \`deploy-weather\` takes no version argument — the role"
+              echo "> pins \`weather_poller_version: latest\`. To roll out this"
+              echo "> exact build, set \`weather_poller_version\` in host_vars"
+              echo "> or add a \`WEATHER_POLLER_VERSION\` passthrough to the"
+              echo "> Makefile target, as \`deploy-alert-engine\` has."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

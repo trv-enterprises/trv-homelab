@@ -1,0 +1,199 @@
+name: PR Checks
+
+# Validation gates for every pull request into main (and pushes to main as a
+# backstop). Modelled on ts-store's pr-checks, adapted for a monorepo:
+#
+# This repo is NOT one Go module. It holds two independent Go services under
+# edge/ — each with its own go.mod and its own Go version — plus the Ansible
+# tree that is most of the repo by file count. `go build ./...` at the root
+# therefore builds NOTHING. Every Go job discovers modules and runs per-module.
+#
+# Jobs:
+#   go-checks   — per-module build + vet + test -race
+#   gofmt       — formatting, scoped to the files this PR touches
+#   vulncheck   — reachability-based CVE scan, per module
+#   ansible     — yamllint + syntax-check for the playbooks and roles
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A newer commit on the same PR/branch cancels the older in-flight run.
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-checks:
+    name: Go build, vet, test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # one service failing should not hide the other's result
+      matrix:
+        module:
+          - edge/sensor-alert-engine
+          - edge/weather-poller
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file per module: the two services are deliberately on
+      # different Go versions (alert-engine 1.23, weather-poller 1.25.5).
+      # Pinning one version here would silently build one of them against a
+      # toolchain its go.mod never asked for.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: go build
+        working-directory: ${{ matrix.module }}
+        run: go build ./...
+
+      - name: go vet
+        working-directory: ${{ matrix.module }}
+        run: go vet ./...
+
+      # -race, not a plain `go test`.
+      #
+      # alert-engine's recovery path swaps the MQTT client and the alerter's
+      # publisher out from under a running sweep goroutine, and its tests are
+      # written to be run under the detector. Without -race they pass while
+      # proving nothing about the thing most likely to break.
+      - name: go test -race
+        working-directory: ${{ matrix.module }}
+        run: go test -race ./...
+
+  gofmt:
+    name: gofmt (changed files)
+    runs-on: ubuntu-latest
+    # Only meaningful on a PR: there is no base to diff a push against.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the merge-base
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: edge/weather-poller/go.mod
+
+      # Scoped to the Go files THIS PR touches, deliberately not `gofmt -l ./...`.
+      #
+      # Formatting drift already exists in this repo (three alert-engine files
+      # were only corrected because `make test` runs go fmt). Failing on the
+      # whole tree would either block every PR or force a repo-wide reformat
+      # that destroys git blame. Scoping to changed files means new and edited
+      # code is formatted from here on, and the backlog clears as files are
+      # touched.
+      - name: Check formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          # xargs -0 passes each filename as its own argument. An unquoted
+          # "$files" string works in bash but collapses to one bogus filename
+          # in zsh, and gofmt then reports nothing — the check would pass
+          # everything. Don't "simplify" this.
+          files="$(git diff --name-only --diff-filter=d "$base"...HEAD -- '*.go')"
+          if [ -z "$files" ]; then
+            echo "No Go files changed."
+            exit 0
+          fi
+          printf 'Checking:\n'; printf '%s\n' "$files" | sed 's/^/  /'
+          unformatted="$(
+            git diff -z --name-only --diff-filter=d "$base"...HEAD -- '*.go' \
+              | xargs -0 gofmt -l
+          )"
+          if [ -n "$unformatted" ]; then
+            echo
+            echo "::error::Changed Go files are not gofmt-formatted"
+            printf '%s\n' "$unformatted" | sed 's/^/  /'
+            echo
+            echo "Fix with:  gofmt -w $(printf '%s ' $unformatted)"
+            echo
+            echo "--- diff ---"
+            printf '%s\n' "$unformatted" | tr '\n' '\0' | xargs -0 gofmt -d
+            exit 1
+          fi
+          echo "All changed Go files are formatted."
+
+  vulncheck:
+    name: Vulnerability scan (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - edge/sensor-alert-engine
+          - edge/weather-poller
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      # govulncheck is reachability-based: it reports a CVE only when this code
+      # actually calls the affected function, rather than flagging every
+      # advisory in the dependency graph. That keeps it quiet enough to gate
+      # every PR instead of becoming the check everyone learns to ignore.
+      #
+      # It also covers the Go toolchain itself, which matters here: alert-engine
+      # is pinned to go 1.23, so a stdlib CVE surfaces as a finding rather than
+      # waiting for someone to notice the version is old.
+      - name: govulncheck
+        working-directory: ${{ matrix.module }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+  ansible:
+    name: Ansible lint and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install tools
+        run: pip install --quiet ansible-core yamllint
+
+      # Config lives at .yamllint. It is deliberately permissive — parse
+      # errors fail, cosmetic style does not. See that file for why.
+      - name: yamllint
+        run: yamllint tools/ansible/ .github/
+
+      # Catches an undefined role, a malformed task list, or a template that
+      # is no longer valid YAML — the class of break that otherwise shows up
+      # halfway through a deploy against a live host.
+      #
+      # ANSIBLE_ROLES_PATH is required: roles_path normally comes from
+      # homelab-deploy's ansible.cfg, which is a different (private) repo, so
+      # without this every playbook fails with "role not found".
+      #
+      # The "host pattern not matched" warnings are expected — the real
+      # inventory lives in homelab-deploy and is not present here.
+      - name: Playbook syntax check
+        env:
+          ANSIBLE_ROLES_PATH: tools/ansible/roles
+        run: |
+          set -euo pipefail
+          failed=0
+          for playbook in tools/ansible/playbooks/*.yml; do
+            echo "::group::$(basename "$playbook")"
+            if ansible-playbook --syntax-check "$playbook"; then
+              echo "ok"
+            else
+              echo "::error file=$playbook::Syntax check failed"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$failed"
