@@ -125,6 +125,20 @@ history but no longer trigger anything.
 `caseta-bridge` has a Dockerfile but is deliberately not published: it deploys
 as Python over rsync + systemd, and that Dockerfile is vestigial.
 
+**A GHCR package needs the repo granted Actions access before CI can push to
+it.** Both existing packages predated this workflow — they were created by
+laptop pushes with a PAT, so they carried no repository link and `GITHUB_TOKEN`
+inherited nothing, giving `denied: permission_denied: write_package`. There is
+no API for this (checked REST and GraphQL): it is Package settings -> Manage
+Actions access -> add the repo with role **Write**. Note that is a SEPARATE
+control from "Repository source" — setting the source alone does not grant the
+push. Images this workflow builds carry `org.opencontainers.image.source`, so
+any *new* package it creates links itself.
+
+**Keep each Dockerfile's Go base image in step with its `go.mod`.** They are
+linked by nothing but attention, and a `go.mod` bump past the base image fails
+the build at `go mod download`.
+
 Two Go modules live here on **different Go versions** (alert-engine 1.23,
 weather-poller 1.25.5), so every Go job resolves its toolchain from that
 module's own `go.mod`. `go build ./...` at the repo root builds nothing.
