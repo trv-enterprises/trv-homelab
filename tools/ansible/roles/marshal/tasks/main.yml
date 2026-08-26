@@ -1,15 +1,15 @@
 ---
-# Alert Engine deployment tasks
-# Deploys rules.yaml and starts the alert-engine container
+# Marshal deployment tasks
+# Deploys rules.yaml and starts the marshal container
 
 - name: Validate rules file variable
   ansible.builtin.fail:
-    msg: "alert_engine_rules_file is required. Pass via -e 'alert_engine_rules_file=path/to/rules.yaml'"
-  when: alert_engine_rules_file is not defined or alert_engine_rules_file == ""
+    msg: "marshal_rules_file is required. Pass via -e 'marshal_rules_file=path/to/rules.yaml'"
+  when: marshal_rules_file is not defined or marshal_rules_file == ""
 
 - name: Deploy rules.yaml
   ansible.builtin.copy:
-    src: "{{ alert_engine_rules_file }}"
+    src: "{{ marshal_rules_file }}"
     dest: "{{ services_deploy_dir }}/rules.yaml"
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
@@ -17,23 +17,23 @@
   become: true
   register: rules_file_result
 
-- name: Pull latest alert-engine image
+- name: Pull latest marshal image
   ansible.builtin.command:
-    cmd: docker compose pull alert-engine
+    cmd: docker compose pull marshal
     chdir: "{{ services_deploy_dir }}"
   register: pull_result
   changed_when: "'Downloaded' in pull_result.stderr or 'Pulled' in pull_result.stderr"
 
-- name: Start/update alert-engine
+- name: Start/update marshal
   ansible.builtin.command:
-    cmd: docker compose up -d alert-engine
+    cmd: docker compose up -d marshal
     chdir: "{{ services_deploy_dir }}"
   register: compose_up
   changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
 
-- name: Wait for alert-engine to start
+- name: Wait for marshal to start
   ansible.builtin.command:
-    cmd: docker compose ps alert-engine --format json
+    cmd: docker compose ps marshal --format json
     chdir: "{{ services_deploy_dir }}"
   register: compose_ps
   until: "'running' in compose_ps.stdout"
@@ -43,7 +43,7 @@
 
 - name: Show recent logs
   ansible.builtin.command:
-    cmd: docker compose logs --tail=10 alert-engine
+    cmd: docker compose logs --tail=10 marshal
     chdir: "{{ services_deploy_dir }}"
   register: engine_logs
   changed_when: false
@@ -51,9 +51,9 @@
 - name: Display deployment status
   ansible.builtin.debug:
     msg: |
-      Alert engine deployed successfully!
-      Image: {{ alert_engine_image }}:{{ alert_engine_version }}
-      Rules: {{ alert_engine_rules_file }}
+      Marshal deployed successfully!
+      Image: {{ marshal_image }}:{{ marshal_version }}
+      Rules: {{ marshal_rules_file }}
       Recent logs:
       {{ engine_logs.stdout }}
 

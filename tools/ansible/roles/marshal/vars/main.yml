@@ -1,0 +1,20 @@
+---
+# Marshal deployment configuration
+
+# Image
+#
+# Marshal lives in its own repo now (trv-enterprises/trv-marshal); this must
+# match IMAGE in that repo's Makefile and the image its CI publishes, or the
+# deploy pulls a tag the release never pushed.
+marshal_image: ghcr.io/trv-enterprises/marshal
+
+# Overridden per deploy: make deploy-marshal MARSHAL_VERSION=x.y.z
+# Pin an explicit tag for anything that must be reproducible or rolled back --
+# `latest` cannot be rolled back to a known-good build.
+marshal_version: latest
+
+# Deployment directory (shared services stack)
+services_deploy_dir: /opt/services
+
+# Mosquitto container used to reach the Z2M bridge request topics.
+mosquitto_container: services-mosquitto-1

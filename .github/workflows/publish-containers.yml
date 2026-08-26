@@ -4,23 +4,23 @@ name: Publish Containers
 #
 # WHY THE TAG CARRIES THE SERVICE NAME
 #
-# This is a monorepo with two publishable images. A bare `v*` tag cannot say
-# which one it means — and historically it did not: every v0.2.0-rc.* tag in
-# this repo versioned alert-engine alone, while weather-poller shipped as
-# :latest from a laptop. Tagging `alert-engine/v0.2.0-rc.11` is unambiguous,
-# lets the two services version independently, and is the standard Go monorepo
-# convention (`golang.org/x/tools/gopls/v0.14.0` and friends).
+# This is a monorepo, and a bare `v*` tag cannot say which service it means.
+# Historically it did not even try: every v0.2.0-rc.* tag versioned the alert
+# engine alone while weather-poller shipped as :latest from a laptop.
 #
-#   git tag -a alert-engine/v0.2.1   -m "..." && git push origin alert-engine/v0.2.1
 #   git tag -a weather-poller/v0.1.0 -m "..." && git push origin weather-poller/v0.1.0
 #
-# The image tag drops the prefix and the leading v: alert-engine/v0.2.1 pushes
-# ghcr.io/trv-enterprises/alert-engine:0.2.1. That matches what the Ansible
-# roles already resolve (alert_engine_version / weather_poller_version) and the
-# GHCR convention of unprefixed image tags.
+# The image tag drops the prefix and the leading v, matching what the Ansible
+# role resolves (weather_poller_version) and the GHCR convention of unprefixed
+# image tags.
 #
-# Existing bare v0.2.0-rc.* tags are left alone — they are valid history, they
-# just do not trigger this workflow.
+# Only weather-poller is published from here now — Marshal (the former alert
+# engine) moved to trv-enterprises/trv-marshal, which publishes its own image
+# from plain v* tags since it has only one. The prefix scheme stays because it
+# is still correct for a monorepo and costs nothing with one service.
+#
+# Existing bare v0.2.0-rc.* and alert-engine/v* tags are left alone — valid
+# history, they just do not trigger this workflow.
 #
 # caseta-bridge has a Dockerfile but is NOT published: it deploys as Python
 # over rsync + systemd (see edge/caseta-bridge/Makefile). Its Dockerfile is
@@ -28,7 +28,6 @@ name: Publish Containers
 on:
   push:
     tags:
-      - 'alert-engine/v*'
       - 'weather-poller/v*'
   workflow_dispatch:
     inputs:
@@ -37,7 +36,6 @@ on:
         required: true
         type: choice
         options:
-          - alert-engine
           - weather-poller
       tag:
         description: 'Image tag (e.g. 0.2.1). Defaults to the branch name.'
@@ -75,8 +73,8 @@ jobs:
               version="${GITHUB_REF_NAME//\//-}"
             fi
           else
-            ref="${GITHUB_REF#refs/tags/}"       # alert-engine/v0.2.1
-            service="${ref%%/*}"                 # alert-engine
+            ref="${GITHUB_REF#refs/tags/}"       # weather-poller/v0.1.0
+            service="${ref%%/*}"                 # weather-poller
             version="${ref#*/}"                  # v0.2.1
             version="${version#v}"               # 0.2.1  (GHCR tags carry no v)
           fi
@@ -84,11 +82,10 @@ jobs:
           # Map the service name to its build context. An unknown name must
           # fail loudly rather than silently building nothing.
           case "$service" in
-            alert-engine)   context="edge/sensor-alert-engine" ;;
             weather-poller) context="edge/weather-poller" ;;
             *)
               echo "::error::Unknown service '$service'."
-              echo "Expected a tag like alert-engine/v0.2.1 or weather-poller/v0.1.0."
+              echo "Expected a tag like weather-poller/v0.1.0."
               exit 1
               ;;
           esac
@@ -153,7 +150,7 @@ jobs:
 
       # Tags are written explicitly rather than via docker/metadata-action's
       # semver patterns: those key off the git ref, which here carries the
-      # service prefix and would produce tags like "alert-engine-v0.2.1".
+      # service prefix and would produce tags like "weather-poller-v0.1.0".
       #
       # No `latest` on a prerelease. A hyphen means prerelease under semver,
       # and the deploy roles default to :latest — so moving latest to an rc
@@ -201,19 +198,12 @@ jobs:
             echo
             echo "Deploy from \`homelab-deploy\`:"
             echo
-            if [ "${{ needs.resolve.outputs.service }}" = "alert-engine" ]; then
-              echo '```'
-              echo "make deploy-alert-engine ALERT_ENGINE_VERSION=${{ needs.resolve.outputs.version }}"
-              echo '```'
-            else
-              echo '```'
-              echo "make deploy-weather"
-              echo '```'
-              echo
-              echo "> \`deploy-weather\` takes no version argument — the role"
-              echo "> pins \`weather_poller_version: latest\`. To roll out this"
-              echo "> exact build, set \`weather_poller_version\` in host_vars"
-              echo "> or add a \`WEATHER_POLLER_VERSION\` passthrough to the"
-              echo "> Makefile target, as \`deploy-alert-engine\` has."
-            fi
+            echo '```'
+            echo "make deploy-weather"
+            echo '```'
+            echo
+            echo "> \`deploy-weather\` takes no version argument — the role"
+            echo "> pins \`weather_poller_version: latest\`. To roll out this"
+            echo "> exact build, set \`weather_poller_version\` in host_vars or"
+            echo "> add a \`WEATHER_POLLER_VERSION\` passthrough to the target."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -37,7 +37,7 @@ ansible-playbook playbooks/server-report.yml
 | `our-kiosk-deploy.yml` | Deploy kiosk voice + display |
 | `our-kiosk-setup.yml` | Initial kiosk setup (Node.js) |
 | `our-kiosk-setup-minisforum.yml` | Minisforum kiosk setup (X11, Node, Python) |
-| `alert-engine-deploy.yml` | Deploy alert engine (Docker, GHCR) |
+| `marshal-deploy.yml` | Deploy Marshal (Docker, GHCR) |
 | `server-report.yml` | Generate infrastructure reports |
 
 ## Directory Structure
@@ -52,7 +52,7 @@ tools/ansible/
 ├── playbooks/                           # Deployment and reporting playbooks
 ├── roles/
 │   ├── services-stack/                  # Shared docker-compose for services LXC
-│   ├── alert-engine/                    # Alert engine deployment
+│   ├── marshal/                    # Marshal deployment
 │   ├── dashboard/                       # Dashboard app deployment
 │   ├── weather-poller/                  # Weather poller deployment
 │   ├── tsstore/                         # ts-store binary deployment
@@ -95,7 +95,7 @@ secrets, and deployment-specific configuration files.
    │       └── vault.yml           # Encrypted secrets (GHCR token, API keys)
    ├── host_vars/                  # Per-host variable overrides
    └── files/                      # Deployment-specific config files
-       └── alert-engine/
+       └── marshal/
            └── rules.yaml          # Your actual alert rules
    ```
 
@@ -107,7 +107,7 @@ secrets, and deployment-specific configuration files.
    ansible-vault encrypt ~/my-homelab-deploy/inventory/group_vars/all/vault.yml
 
    # Copy example alert rules and customize with your device names
-   cp ../../edge/sensor-alert-engine/rules.yaml ~/my-homelab-deploy/files/alert-engine/rules.yaml
+   cp ../../edge/sensor-marshal/rules.yaml ~/my-homelab-deploy/files/marshal/rules.yaml
    ```
 
 4. **Run playbooks** from your deploy repo using `-i` to point at your inventory:
@@ -125,9 +125,9 @@ INVENTORY = inventory
 deploy-weather:
     ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/weather-poller-deploy.yml
 
-deploy-alert-engine:
-    ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/alert-engine-deploy.yml \
-        -e "alert_engine_rules_file=$(CURDIR)/files/alert-engine/rules.yaml"
+deploy-marshal:
+    ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/marshal-deploy.yml \
+        -e "marshal_rules_file=$(CURDIR)/files/marshal/rules.yaml"
 
 deploy-dashboard:
     ansible-playbook -i $(INVENTORY) $(PLAYBOOK_DIR)/dashboard-deploy.yml

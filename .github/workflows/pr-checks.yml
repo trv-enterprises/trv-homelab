@@ -3,10 +3,14 @@ name: PR Checks
 # Validation gates for every pull request into main (and pushes to main as a
 # backstop). Modelled on ts-store's pr-checks, adapted for a monorepo:
 #
-# This repo is NOT one Go module. It holds two independent Go services under
-# edge/ — each with its own go.mod and its own Go version — plus the Ansible
-# tree that is most of the repo by file count. `go build ./...` at the root
-# therefore builds NOTHING. Every Go job discovers modules and runs per-module.
+# This repo is NOT one Go module. The Go service under edge/ has its own
+# go.mod, and the Ansible tree is most of the repo by file count. `go build
+# ./...` at the root therefore builds NOTHING — every Go job runs per-module,
+# resolving its toolchain from that module's own go.mod.
+#
+# The matrix keeps its shape with one entry on purpose: Marshal moved out to
+# trv-enterprises/trv-marshal, and a second service landing here again should
+# be one line, not a restructure.
 #
 # Jobs:
 #   go-checks   — per-module build + vet + test -race
@@ -35,15 +39,12 @@ jobs:
       fail-fast: false # one service failing should not hide the other's result
       matrix:
         module:
-          - edge/sensor-alert-engine
           - edge/weather-poller
     steps:
       - uses: actions/checkout@v4
 
-      # go-version-file per module: the two services are deliberately on
-      # different Go versions (alert-engine 1.23, weather-poller 1.25.5).
-      # Pinning one version here would silently build one of them against a
-      # toolchain its go.mod never asked for.
+      # go-version-file per module rather than a pinned version here, so a
+      # module is never built against a toolchain its go.mod did not ask for.
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.module }}/go.mod
@@ -57,12 +58,8 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go vet ./...
 
-      # -race, not a plain `go test`.
-      #
-      # alert-engine's recovery path swaps the MQTT client and the alerter's
-      # publisher out from under a running sweep goroutine, and its tests are
-      # written to be run under the detector. Without -race they pass while
-      # proving nothing about the thing most likely to break.
+      # -race, not a plain `go test`. Concurrency bugs in these services are
+      # the ones that reach production silently.
       - name: go test -race
         working-directory: ${{ matrix.module }}
         run: go test -race ./...
@@ -128,7 +125,6 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - edge/sensor-alert-engine
           - edge/weather-poller
     steps:
       - uses: actions/checkout@v4
@@ -143,9 +139,8 @@ jobs:
       # advisory in the dependency graph. That keeps it quiet enough to gate
       # every PR instead of becoming the check everyone learns to ignore.
       #
-      # It also covers the Go toolchain itself, which matters here: alert-engine
-      # is pinned to go 1.23, so a stdlib CVE surfaces as a finding rather than
-      # waiting for someone to notice the version is old.
+      # It also covers the Go toolchain itself, so a stdlib CVE surfaces as a
+      # finding rather than waiting for someone to notice the version is old.
       - name: govulncheck
         working-directory: ${{ matrix.module }}
         run: |

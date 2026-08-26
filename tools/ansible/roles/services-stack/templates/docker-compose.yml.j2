@@ -53,11 +53,11 @@ services:
     depends_on:
       - mosquitto
 
-  alert-engine:
-    image: ghcr.io/trv-enterprises/alert-engine:{{ alert_engine_version | default("latest") }}
+  marshal:
+    image: ghcr.io/trv-enterprises/marshal:{{ marshal_version | default("latest") }}
     restart: unless-stopped
     volumes:
-      - ./rules.yaml:/etc/alert-engine/rules.yaml:ro
+      - ./rules.yaml:/etc/marshal/rules.yaml:ro
     environment:
       - TZ=America/Chicago
     depends_on:
@@ -88,8 +88,8 @@ services:
       test:
         - CMD-SHELL
         - >-
-          [ "$$(cat /tmp/alert-engine-health 2>/dev/null)" = "ok" ] &&
-          [ "$$(( $$(date +%s) - $$(date -r /tmp/alert-engine-health +%s) ))" -lt 720 ]
+          [ "$$(cat /tmp/marshal-health 2>/dev/null)" = "ok" ] &&
+          [ "$$(( $$(date +%s) - $$(date -r /tmp/marshal-health +%s) ))" -lt 720 ]
       interval: 2m
       timeout: 10s
       retries: 3
@@ -97,7 +97,7 @@ services:
 
   # Restarts containers that report unhealthy. Docker marks health status but
   # never acts on it, so without this a healthcheck is only a label on
-  # `docker ps` -- which is exactly the gap that let a deaf alert-engine sit
+  # `docker ps` -- which is exactly the gap that let a deaf marshal sit
   # for fourteen hours.
   #
   # Scoped by label: it only touches containers carrying `autoheal=true`, so
@@ -116,7 +116,7 @@ services:
       - TZ=America/Chicago
       - AUTOHEAL_CONTAINER_LABEL=autoheal
       # Grace period after a container starts before it is eligible for a
-      # restart. Comfortably longer than alert-engine's start_period so a slow
+      # restart. Comfortably longer than marshal's start_period so a slow
       # boot is never mistaken for a wedge.
       - AUTOHEAL_START_PERIOD=120
       - AUTOHEAL_INTERVAL=30

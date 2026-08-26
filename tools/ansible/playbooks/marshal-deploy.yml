@@ -1,0 +1,17 @@
+---
+# Marshal Deployment Playbook
+#
+# Requires:
+#   - marshal_rules_file: path to rules.yaml on controller
+#
+# Deploy:
+#   ansible-playbook playbooks/marshal-deploy.yml \
+#     -e "marshal_rules_file=/path/to/rules.yaml"
+
+- name: Deploy Marshal
+  hosts: services
+  become: false
+
+  roles:
+    - services-stack
+    - marshal

@@ -17,7 +17,6 @@ tailnet address, key, or secret. RFC1918 LAN addresses are acceptable.
   - `edge/zigbee2mqtt/` -- Zigbee2MQTT deployment (services LXC, Docker Compose)
   - `edge/homebridge/` -- Homebridge + mqttthing (HomeKit bridge via MQTT)
   - `edge/weather-poller/` -- Go service polling Visual Crossing API, publishes to MQTT
-  - `edge/sensor-alert-engine/` -- Go alert engine: threshold alerts + edge-triggered actuation
   - `edge/caseta-bridge/` -- Lutron Caseta MQTT bridge
   - `edge/mosquitto/` -- MQTT broker deployment
   - `edge/tsstore/` -- ts-store deployment configs
@@ -44,59 +43,33 @@ the design is what it is, which is not recoverable from the code:
 
 ## Go Services
 
-Two Go modules live here. Both build to containers published on GHCR under the
-`trv-enterprises` org.
+One Go module lives here, building to a container published on GHCR under the
+`trv-enterprises` org. (Marshal, the former alert engine, moved to its own repo
+— see Related Repos.)
 
 | Service | Module path | Purpose |
 |---|---|---|
 | `edge/weather-poller/` | `github.com/trv-enterprises/trv-homelab/edge/weather-poller` | Visual Crossing -> MQTT |
-| `edge/sensor-alert-engine/` | `github.com/trv-enterprises/trv-homelab/edge/sensor-alert-engine` | Threshold alerts + actuation |
 
-Both use the path-based module name, so a module's import path matches where it
-actually lives. Keep it that way when adding a third.
+It uses the path-based module name, so the import path matches where it
+actually lives. Keep it that way when adding another.
 
-### sensor-alert-engine
+### Marshal (moved out)
 
-Rules are the engine's **only** interface -- no UI, no API. `README.md` in that
-directory is the rule-writing reference; `rules.yaml` there is an example, while
-the deployed ruleset lives in `homelab-deploy/files/alert-engine/rules.yaml`.
+The alert/automation engine that drives the nightlight now lives in
+**`trv-enterprises/trv-marshal`**, renamed Marshal — "alert engine" stopped
+describing it once it gained edge-triggered actuation.
 
-The engine does two distinct jobs:
-- **Threshold alerts** -- a condition held for `duration_minutes` publishes to
-  the alert topic (e.g. garage door left open).
-- **Edge-triggered actuation** -- a condition transition publishes a command,
-  with ownership arbitration so the engine, a manual command, and the device's
-  own logic cannot race. See `docs/nightlight-automation.md`.
+What stays here is the **deployment** side only: the `marshal` Ansible role,
+`marshal-deploy.yml`, and its service block in the services-stack compose
+template. The code, its CI and its releases are in that repo.
 
-**MQTT reconnect semantics (paho) -- read before touching the connection code.**
-Three silent outages (2026-08-22, 2026-08-23, 2026-08-25) with the same
-signature: the process stays up, the container reports healthy, and no commands
-are published because as far as the engine knows nothing has happened.
-Library-level notes that apply beyond this repo are in the global
-`paho-mqtt-go-pitfalls` memory; full detail in
-`edge/sensor-alert-engine/CLAUDE.md`.
+Its paho MQTT reconnect notes moved with it (`trv-marshal/CLAUDE.md`), and the
+library-level version is in the global `paho-mqtt-go-pitfalls` memory.
 
-- `IsConnected()` reports paho's *intent* to hold a session, not socket health.
-  A client evicted by the broker can report connected indefinitely. Prolonged
-  inbound silence is the real signal -- hence the heartbeat.
-- `Disconnect()` marks the session **user-requested** and suppresses
-  auto-reconnect, and it transitions status asynchronously. Calling `Connect()`
-  straight after it is rejected with `status can only transition to connecting
-  from disconnected`, leaving the client wedged offline with no retry.
-- **A wedged client cannot be rehabilitated through the public API** -- neither
-  exported probe distinguishes `disconnecting` from `disconnected`, so waiting
-  for it to settle is not possible. Recovery builds a NEW client; a fresh one
-  starts at `disconnected`, so its `Connect()` is always legal.
-- `Connect()` does **not** replay subscriptions under CleanSession. Any
-  reconnect path must resubscribe explicitly -- that is why `SubscribeAll`
-  exists and why `OnConnect` calls it.
-- Recovery must trigger on `!connected || stalled`. Gating on `stalled` alone
-  is a trap: `stalled` requires `connected == true`, so once a failed reconnect
-  flips connected to false there is no path back.
-
-The heartbeat exists to turn *absence* of activity into an alertable signal.
-`messages_total` counts what actually arrived from the broker; repeated
-heartbeats reporting zero while devices are known to be publishing is a stall.
+One thing deliberately did NOT move: the alert payload's `source` field is
+still `"alert_engine"`. It is wire format that trv-kiosk matches on — renaming
+it silently breaks alert display there.
 
 ## CI
 
@@ -113,8 +86,8 @@ GitHub Actions, in `.github/workflows/`:
 two images it means:
 
 ```bash
-git tag -a alert-engine/v0.2.1 -m "..." && git push origin alert-engine/v0.2.1
-# -> ghcr.io/trv-enterprises/alert-engine:0.2.1  (+ :latest when not a prerelease)
+git tag -a weather-poller/v0.1.0 -m "..." && git push origin weather-poller/v0.1.0
+# -> ghcr.io/trv-enterprises/weather-poller:0.1.0  (+ :latest when not a prerelease)
 ```
 
 A hyphenated version is treated as a prerelease and does **not** move
@@ -139,9 +112,9 @@ any *new* package it creates links itself.
 linked by nothing but attention, and a `go.mod` bump past the base image fails
 the build at `go mod download`.
 
-Two Go modules live here on **different Go versions** (alert-engine 1.23,
-weather-poller 1.25.5), so every Go job resolves its toolchain from that
-module's own `go.mod`. `go build ./...` at the repo root builds nothing.
+Go jobs resolve their toolchain from the module's own `go.mod` rather than a
+pinned version — `go build ./...` at the repo root builds nothing, since the
+module lives under `edge/`.
 
 `.yamllint` is deliberately permissive — it fails on parse errors, duplicate
 keys, tabs and implicit octal (a real Ansible file-mode footgun) but not on
@@ -178,7 +151,7 @@ testing against a different inventory.
 
 ```bash
 # From tools/ansible/ (use -i to point to your inventory)
-ansible-playbook -i <inventory> playbooks/alert-engine-deploy.yml
+ansible-playbook -i <inventory> playbooks/marshal-deploy.yml
 ansible-playbook -i <inventory> playbooks/dashboard-deploy.yml
 ansible-playbook -i <inventory> playbooks/dashboard-preprod-deploy.yml
 ansible-playbook -i <inventory> playbooks/docker-stats-deploy.yml
@@ -193,7 +166,7 @@ ansible-playbook -i <inventory> playbooks/tsstore-deploy.yml
 ansible-playbook -i <inventory> playbooks/weather-poller-deploy.yml
 ```
 
-Roles: `alert-engine`, `dashboard`, `nut-client`, `server-report`,
+Roles: `marshal`, `dashboard`, `nut-client`, `server-report`,
 `services-stack`, `simulators`, `tsstore`, `voice-display`, `weather-poller`.
 
 `services-stack` owns the shared `docker-compose.yml` for the services LXC.
@@ -233,7 +206,7 @@ schema stores hold flat typed fields only -- no embedded arrays.
 | ID | Hostname | Purpose |
 |----|----------|---------|
 | 100 | dashboard | Dashboard app |
-| 101 | services | Mosquitto, Zigbee2MQTT, Homebridge, Caseta bridge, weather-poller, alert-engine, Cloudflare tunnel |
+| 101 | services | Mosquitto, Zigbee2MQTT, Homebridge, Caseta bridge, weather-poller, Marshal, Cloudflare tunnel |
 | 102 | nvr | Frigate, Scrypted |
 | 103 | photos | Immich |
 
@@ -242,7 +215,7 @@ schema stores hold flat typed fields only -- no embedded arrays.
 - **Coordinator**: Sonoff Zigbee 3.0 USB Dongle Plus-E (Silicon Labs EFR32MG21, EmberZNet 7.4.5)
 - **USB path**: `/dev/ttyUSB0` on trv-srv-002, passed through to services LXC (101) via cgroup + bind mount
 - **Zigbee2MQTT**: Running on services LXC as Docker container
-- **MQTT integration**: Publishes to `zigbee2mqtt/#` on the same Mosquitto broker used by Caseta bridge and alert engine
+- **MQTT integration**: Publishes to `zigbee2mqtt/#` on the same Mosquitto broker used by Caseta bridge and Marshal
 - **Channel**: 11
 - **Network key**: Stored in 1Password (not in repo)
 
@@ -281,7 +254,7 @@ broker bridges selected topics to it rather than being consumed directly.
 | `zigbee2mqtt/<device>/set` | broker -> device | Zigbee device commands |
 | `caseta/<device>` | bridge -> broker | Caseta device state |
 | `caseta/<device>/set` | broker -> bridge | Caseta device commands |
-| `sensors/alerts` | alert engine -> broker | Alert events |
+| `sensors/alerts` | Marshal -> broker | Alert events |
 | `weather/*` | poller -> broker | Current conditions, forecasts, alerts |
 | `frigate/reviews` | NVR bridge -> broker | Detection events |
 | `automation/<name>/enable` | any -> engine | Park/resume an automation rule |
@@ -311,6 +284,7 @@ hardware with different IPs?* If yes, it belongs here. Prefer a nested
 ## Related Repos
 
 - [trv-kiosk](https://github.com/trv-enterprises/trv-kiosk) -- Voice-controlled smart display (React + Python)
+- [trv-marshal](https://github.com/trv-enterprises/trv-marshal) -- Marshal, the MQTT automation engine (split out of this repo 2026-08-26)
 - `homelab-deploy` (private) -- real inventory, vault, host_vars, `make` deploy targets
 - `trv-outpost-sim` -- simulator services, synced into the `simulators` role at deploy time
 - `ts-store` -- the time-series store these collectors write to
