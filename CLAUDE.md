@@ -64,6 +64,14 @@ What stays here is the **deployment** side only: the `marshal` Ansible role,
 `marshal-deploy.yml`, and its service block in the services-stack compose
 template. The code, its CI and its releases are in that repo.
 
+**Renaming a compose service leaves the old container running.** `docker
+compose up -d <new>` starts the new service; it does not remove the container
+for a service name that no longer exists in the file. On 2026-08-26 both ran
+for a few minutes, and they immediately began fighting over the nightlight —
+the old engine saw the new one's publish on the device `/set` topic and logged
+"manual override engaged", because that topic is its own override_topic. Stop
+and remove the old container by hand after any service rename.
+
 Its paho MQTT reconnect notes moved with it (`trv-marshal/CLAUDE.md`), and the
 library-level version is in the global `paho-mqtt-go-pitfalls` memory.
 
