@@ -104,14 +104,14 @@
             "name": "Nightlight",
             "url": "mqtt://localhost:1883",
             "topics": {
-                "getOn": "zigbee2mqtt/motion-night-light-001",
-                "setOn": "zigbee2mqtt/motion-night-light-001/set",
-                "getBrightness": "zigbee2mqtt/motion-night-light-001",
-                "setBrightness": "zigbee2mqtt/motion-night-light-001/set",
-                "getHue": "zigbee2mqtt/motion-night-light-001",
-                "setHue": "zigbee2mqtt/motion-night-light-001/set",
-                "getSaturation": "zigbee2mqtt/motion-night-light-001",
-                "setSaturation": "zigbee2mqtt/motion-night-light-001/set"
+                "getOn": "zigbee2mqtt/night-light-kitchen",
+                "setOn": "zigbee2mqtt/night-light-kitchen/set",
+                "getBrightness": "zigbee2mqtt/night-light-kitchen",
+                "setBrightness": "zigbee2mqtt/night-light-kitchen/set",
+                "getHue": "zigbee2mqtt/night-light-kitchen",
+                "setHue": "zigbee2mqtt/night-light-kitchen/set",
+                "getSaturation": "zigbee2mqtt/night-light-kitchen",
+                "setSaturation": "zigbee2mqtt/night-light-kitchen/set"
             },
             "codec": "z2m-codec.js"
         },
@@ -122,7 +122,7 @@
             "url": "mqtt://localhost:1883",
             "integerValue": true,
             "topics": {
-                "getOccupancyDetected": "zigbee2mqtt/motion-night-light-001"
+                "getOccupancyDetected": "zigbee2mqtt/night-light-kitchen"
             },
             "codec": "z2m-codec.js"
         },
@@ -133,8 +133,8 @@
             "url": "mqtt://localhost:1883",
             "integerValue": true,
             "topics": {
-                "getOn": "automation/nightlight/owner",
-                "setOn": "automation/nightlight/enable"
+                "getOn": "automation/night-light-kitchen/owner",
+                "setOn": "automation/night-light/enable"
             },
             "codec": "z2m-codec.js"
         }
