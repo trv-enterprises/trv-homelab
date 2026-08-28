@@ -128,6 +128,118 @@
         },
         {
             "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Utility Room Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-utility-room",
+                "setOn": "zigbee2mqtt/night-light-utility-room/set",
+                "getBrightness": "zigbee2mqtt/night-light-utility-room",
+                "setBrightness": "zigbee2mqtt/night-light-utility-room/set",
+                "getHue": "zigbee2mqtt/night-light-utility-room",
+                "setHue": "zigbee2mqtt/night-light-utility-room/set",
+                "getSaturation": "zigbee2mqtt/night-light-utility-room",
+                "setSaturation": "zigbee2mqtt/night-light-utility-room/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Utility Room Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-utility-room"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Media Room Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-media-room",
+                "setOn": "zigbee2mqtt/night-light-media-room/set",
+                "getBrightness": "zigbee2mqtt/night-light-media-room",
+                "setBrightness": "zigbee2mqtt/night-light-media-room/set",
+                "getHue": "zigbee2mqtt/night-light-media-room",
+                "setHue": "zigbee2mqtt/night-light-media-room/set",
+                "getSaturation": "zigbee2mqtt/night-light-media-room",
+                "setSaturation": "zigbee2mqtt/night-light-media-room/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Media Room Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-media-room"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Dining Room Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-dining-room",
+                "setOn": "zigbee2mqtt/night-light-dining-room/set",
+                "getBrightness": "zigbee2mqtt/night-light-dining-room",
+                "setBrightness": "zigbee2mqtt/night-light-dining-room/set",
+                "getHue": "zigbee2mqtt/night-light-dining-room",
+                "setHue": "zigbee2mqtt/night-light-dining-room/set",
+                "getSaturation": "zigbee2mqtt/night-light-dining-room",
+                "setSaturation": "zigbee2mqtt/night-light-dining-room/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Dining Room Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-dining-room"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Hall Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-hall",
+                "setOn": "zigbee2mqtt/night-light-hall/set",
+                "getBrightness": "zigbee2mqtt/night-light-hall",
+                "setBrightness": "zigbee2mqtt/night-light-hall/set",
+                "getHue": "zigbee2mqtt/night-light-hall",
+                "setHue": "zigbee2mqtt/night-light-hall/set",
+                "getSaturation": "zigbee2mqtt/night-light-hall",
+                "setSaturation": "zigbee2mqtt/night-light-hall/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Hall Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-hall"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
             "type": "switch",
             "name": "Nightlight Auto",
             "url": "mqtt://localhost:1883",
