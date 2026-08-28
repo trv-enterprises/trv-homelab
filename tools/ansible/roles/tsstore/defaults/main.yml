@@ -97,3 +97,23 @@ synology_snmp_interval: 60
 # synology_snmp_target / _http / _store_prefix / _user_name / _auth_pass /
 # _priv_pass / _disks_key / _volumes_key / _system_key have no safe defaults —
 # the playbook or host_vars must set them.
+
+# --- nightlight-motion collector (tasks/nightlight-motion.yml, invoked by
+# playbooks/nightlight-motion-deploy.yml) ---
+# Runs ON the ts-store host: captures nightlight occupancy (+ illuminance)
+# from Zigbee2MQTT into a local schema store over the unix socket. One tall
+# record per publish, keyed by a `device` field. The binary lives in THIS
+# repo under edge/nightlight-motion (its own Go module) and is built locally
+# and pushed, like synology-snmp.
+nightlight_motion_store: nightlight-motion
+nightlight_motion_bin: /usr/local/bin/nightlight-motion
+nightlight_motion_src_dir: "{{ playbook_dir }}/../../../edge/nightlight-motion"
+nightlight_motion_build_dir: "{{ playbook_dir }}/../../../edge/nightlight-motion"
+nightlight_motion_blocks: 10000
+# Registry grant note — also the idempotency marker for key adoption; keep
+# stable or the key is re-adopted (harmless duplicate, but noisy).
+nightlight_motion_key_note: "nightlight-motion collector (Ansible)"
+# Required from the deployment inventory (no defaults):
+#   nightlight_motion_broker    tcp://<broker>:1883
+#   nightlight_motion_devices   [list of Z2M device names]
+#   nightlight_motion_api_key   store key (1Password via op lookup)

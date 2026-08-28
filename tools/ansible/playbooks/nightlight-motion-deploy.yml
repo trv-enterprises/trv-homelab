@@ -1,0 +1,40 @@
+---
+# nightlight-motion Collector Deployment Playbook
+#
+# Deploys the nightlight occupancy collector ONTO THE TS-STORE HOST. It
+# subscribes to each nightlight's Zigbee2MQTT state topic on the services
+# broker and writes one tall record per publish (device, occupancy,
+# illuminance) to a local `nightlight-motion` schema store over the unix
+# socket. The store, its schema, and its registry key grant are all
+# created here on first run.
+#
+# The collector runs on the STORE's host, not the broker's: the write path
+# stays local (no cross-host auth), and the unit is BindsTo/PartOf
+# tsstore.service so it follows the store's lifecycle — the same
+# arrangement as the shelly-ht collector on its host. The MQTT
+# subscription is the remote leg; if the broker is unreachable there is
+# nothing to capture anyway, and paho reconnects on its own.
+#
+# The binary is built locally from edge/nightlight-motion (requires a Go
+# toolchain on the control node) and pushed — not a release asset.
+#
+# Per-host config lives in host_vars/<host>.yml:
+#   nightlight_motion_broker    MQTT broker URL (tcp://<broker>:1883)
+#   nightlight_motion_devices   list of Z2M device names to capture
+#   nightlight_motion_api_key   store API key (1Password via op lookup)
+#
+# Usage:
+#   ansible-playbook playbooks/nightlight-motion-deploy.yml
+#
+# The default target is trv-srv-002; override with
+# -e nightlight_motion_host=<host>.
+
+- name: Deploy nightlight-motion collector
+  hosts: "{{ nightlight_motion_host | default('trv-srv-002') }}"
+  become: false
+
+  tasks:
+    - name: Run nightlight-motion collector role tasks
+      ansible.builtin.include_role:
+        name: tsstore
+        tasks_from: nightlight-motion.yml

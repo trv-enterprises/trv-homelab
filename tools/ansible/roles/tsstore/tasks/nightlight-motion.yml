@@ -1,0 +1,191 @@
+---
+# nightlight-motion collector deployment.
+#
+# Runs ON the ts-store host and captures nightlight occupancy events from
+# MQTT into a local schema store over the unix socket. One tall record per
+# Zigbee2MQTT publish, keyed by a `device` discriminator (same table-shape
+# convention as docker-containers / synology-snmp). Z2M sends full cached
+# state on every publish, so records carry illuminance alongside occupancy.
+#
+# Unlike the release-asset collectors (system-stats, journal-logs), the
+# binary lives in this repo under edge/nightlight-motion and is built
+# locally and pushed — same arrangement as synology-snmp.
+#
+# Key handling is REGISTRY-ERA (v0.19+): per-store keys.json seeding is
+# ignored for stores created after the first v0.19 boot (the 2026-08-14
+# simulators outage), so the key is adopted into the central registry with
+# `tsstore key create --key-file -`. The registry is re-read live — no
+# restart needed. Idempotency keys on the grant note, not "any key reaches
+# the store": a wildcard admin key must not suppress the collector's own
+# registration.
+#
+# Required vars (from playbooks/nightlight-motion-deploy.yml / host_vars):
+#   nightlight_motion_broker    MQTT broker URL (tcp://<host>:1883)
+#   nightlight_motion_devices   list of Z2M device names to capture
+#   nightlight_motion_api_key   store API key (1Password via op lookup)
+
+- name: Validate nightlight-motion configuration
+  ansible.builtin.assert:
+    that:
+      - nightlight_motion_broker is defined and (nightlight_motion_broker | length) > 0
+      - nightlight_motion_devices is defined and (nightlight_motion_devices | length) > 0
+      - nightlight_motion_api_key is defined and (nightlight_motion_api_key | length) > 0
+    fail_msg: >-
+      nightlight-motion needs nightlight_motion_broker, a non-empty
+      nightlight_motion_devices list, and nightlight_motion_api_key.
+      Add them to host_vars/{{ inventory_hostname }}.yml (see playbook header).
+
+- name: Detect control-node Go toolchain
+  ansible.builtin.command: go version
+  delegate_to: localhost
+  run_once: true
+  register: nightlight_motion_go
+  changed_when: false
+  failed_when: nightlight_motion_go.rc != 0
+
+- name: Determine target architecture suffix
+  ansible.builtin.set_fact:
+    nightlight_motion_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+
+# Built from inside edge/nightlight-motion: it is its own Go module.
+- name: Build nightlight-motion binary locally
+  ansible.builtin.command:
+    cmd: >-
+      go build -ldflags=-w -ldflags=-s
+      -o {{ nightlight_motion_build_dir }}/nightlight-motion-linux-{{ nightlight_motion_arch }} .
+    chdir: "{{ nightlight_motion_src_dir }}"
+  environment:
+    GOOS: linux
+    GOARCH: "{{ nightlight_motion_arch }}"
+    CGO_ENABLED: "0"
+  delegate_to: localhost
+  run_once: true
+  changed_when: true
+
+- name: Install nightlight-motion binary
+  ansible.builtin.copy:
+    src: "{{ nightlight_motion_build_dir }}/nightlight-motion-linux-{{ nightlight_motion_arch }}"
+    dest: "{{ nightlight_motion_bin }}"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  notify: Restart nightlight-motion
+
+# --- Store: create + key + schema, all on this host ---
+
+- name: Check whether the nightlight-motion store exists (meta.tsdb present)
+  ansible.builtin.stat:
+    path: "{{ tsstore_data_dir }}/{{ nightlight_motion_store }}/meta.tsdb"
+  register: nightlight_motion_meta
+  become: true
+
+- name: Create the nightlight-motion store
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_bin_dir }}/tsstore create {{ nightlight_motion_store }}
+      --path {{ tsstore_data_dir }}
+      --type schema
+      --blocks {{ nightlight_motion_blocks }}
+    chdir: "{{ tsstore_data_dir }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  when: not nightlight_motion_meta.stat.exists
+  become: true
+  become_user: "{{ tsstore_user }}"
+  changed_when: true
+
+- name: Check whether the collector's key is already registered
+  ansible.builtin.command:
+    cmd: "{{ tsstore_bin_dir }}/tsstore key list {{ nightlight_motion_store }}"
+    chdir: "{{ tsstore_data_dir }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  become: true
+  become_user: "{{ tsstore_user }}"
+  register: nightlight_motion_key_list
+  changed_when: false
+
+# manage is needed alongside read,write: the schema PUT below authenticates
+# with this key, and schema writes are a `manage` operation.
+- name: Adopt the collector key into the key registry
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_bin_dir }}/tsstore key create --key-file -
+      --grant read,write,manage:{{ nightlight_motion_store }}
+      --note "{{ nightlight_motion_key_note }}"
+    chdir: "{{ tsstore_data_dir }}"
+    stdin: "{{ nightlight_motion_api_key }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  when: nightlight_motion_key_note not in nightlight_motion_key_list.stdout
+  become: true
+  become_user: "{{ tsstore_user }}"
+  no_log: true
+  changed_when: true
+
+- name: Apply the schema to a newly-created store
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores/{{ nightlight_motion_store }}/schema"
+    method: PUT
+    headers:
+      X-API-Key: "{{ nightlight_motion_api_key }}"
+    body_format: json
+    body:
+      fields:
+        - {index: 1, name: "device", type: "string"}
+        - {index: 2, name: "occupancy", type: "int32"}
+        - {index: 3, name: "illuminance", type: "int64"}
+    status_code: 200
+  when: not nightlight_motion_meta.stat.exists
+  become: true
+  no_log: true
+
+# --- Service ---
+
+- name: Create tsstore config dir (for the env file)
+  ansible.builtin.file:
+    path: "{{ tsstore_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+# Key and broker in the env file, never in the unit's ExecStart — argv is
+# world-readable via `ps`.
+- name: Create nightlight-motion environment file
+  ansible.builtin.copy:
+    content: |
+      MQTT_BROKER={{ nightlight_motion_broker }}
+      NIGHTLIGHT_DEVICES={{ nightlight_motion_devices | join(',') }}
+      TSSTORE_SOCKET_PATH={{ tsstore_socket }}
+      TSSTORE_STORE={{ nightlight_motion_store }}
+      TSSTORE_API_KEY={{ nightlight_motion_api_key }}
+    dest: "{{ tsstore_config_dir }}/nightlight-motion.env"
+    owner: root
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart nightlight-motion
+
+- name: Create nightlight-motion systemd service
+  ansible.builtin.template:
+    src: nightlight-motion.service.j2
+    dest: /etc/systemd/system/nightlight-motion.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart nightlight-motion
+
+- name: Enable and start nightlight-motion
+  ansible.builtin.systemd:
+    name: nightlight-motion
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

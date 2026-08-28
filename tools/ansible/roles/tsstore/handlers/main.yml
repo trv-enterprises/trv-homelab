@@ -35,3 +35,9 @@
     name: synology-snmp
     state: restarted
   become: true
+
+- name: Restart nightlight-motion
+  ansible.builtin.systemd:
+    name: nightlight-motion
+    state: restarted
+  become: true

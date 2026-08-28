@@ -1,0 +1,34 @@
+[Unit]
+Description=nightlight-motion collector (ts-store) — captures nightlight occupancy from MQTT
+Documentation=https://github.com/trv-enterprises/trv-homelab/tree/main/edge/nightlight-motion
+# Writes over the LOCAL ts-store socket, so it follows tsstore's lifecycle:
+# BindsTo stops it when tsstore stops, PartOf restarts it on tsstore restart.
+# The MQTT side needs only the network; paho reconnects on its own.
+After=network-online.target tsstore.service
+Wants=network-online.target
+BindsTo=tsstore.service
+PartOf=tsstore.service
+
+[Service]
+Type=simple
+User={{ tsstore_user }}
+
+# Holds the store API key. Deliberately NOT passed as flags: argv is
+# world-readable via `ps`.
+EnvironmentFile={{ tsstore_config_dir }}/nightlight-motion.env
+ExecStart={{ nightlight_motion_bin }}
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Hardening: outbound TCP to the broker plus the tsstore socket; reads one
+# env file, writes nothing to disk.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
