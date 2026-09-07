@@ -411,6 +411,13 @@ class Display:
             self.regions = await self.page.evaluate(REGIONS_JS, {"rules": self.cfg.regions.rules, "exclude": self.cfg.regions.exclude})
         except Exception as e:
             log.warning("regions failed: %s", e); return
+        # An open menu or popup gets a synthetic "Close" region so a viewer can
+        # always back out by selecting something, whatever its remote does.
+        if self.regions and self.regions[0].get("kind") in ("menu", "popup"):
+            first = self.regions[0]
+            self.regions.append({"id": "close", "label": "Close", "kind": first["kind"], "action": "escape",
+                                 "x": first["x"], "y": max(0.0, first["y"] - first["h"] * 1.1),
+                                 "w": first["w"], "h": first["h"]})
         self.mqtt.publish_regions({"url": self.page.url, "count": len(self.regions), "regions": self.regions})
         log.info("regions: %d (%s)", len(self.regions), reason)
 
@@ -426,7 +433,9 @@ class Display:
                     x, y = (r["x"] + r["w"] / 2) * self.view_w, (r["y"] + r["h"] / 2) * self.view_h
                 else:
                     x, y = float(c["x"]) * self.view_w, float(c["y"]) * self.view_h
-                if "id" in c and r.get("action") == "dblclick":
+                if "id" in c and r.get("action") == "escape":
+                    await p.keyboard.press("Escape")
+                elif "id" in c and r.get("action") == "dblclick":
                     await p.mouse.dblclick(x, y)
                 else:
                     await p.mouse.click(x, y)
