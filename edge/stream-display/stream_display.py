@@ -92,6 +92,12 @@ class LoggingConfig:
 # to style) and what a click on the TV does to them. These defaults know the
 # Outpost dashboard's markup; a config file can replace them wholesale.
 DEFAULT_REGION_RULES = [
+    # Open menus first. Carbon renders them in a portal at the end of <body>:
+    # OverflowMenu items are role=menuitem inside role=menu, Dropdown/ComboBox
+    # options are role=option inside role=listbox. While one is open the scan
+    # is scoped to it (see REGIONS_JS), so these are the only regions.
+    {"selector": "[role=menu] [role=menuitem], [role=menuitem]", "kind": "menu"},
+    {"selector": "[role=listbox] [role=option], [role=option]", "kind": "menu"},
     {"selector": "button[aria-label='Notifications']", "kind": "header", "label": "Notifications"},
     # Carbon IconButtons keep their label in a tooltip that is not in the DOM
     # until hovered, so name the three nav buttons by position.
@@ -194,8 +200,11 @@ def load_config(path: Optional[str]) -> Config:
 REGIONS_JS = """
 (cfg) => {
   // When a modal is open only its contents are reachable; scope the scan to it.
+  const visible = el => { if (!el) return false; const r = el.getBoundingClientRect(); const st = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && st.visibility !== 'hidden' && st.display !== 'none'; };
   const modal = document.querySelector('.cds--modal.is-visible');
-  const scope = modal || document;
+  const menu = [...document.querySelectorAll('[role=menu], [role=listbox]')].find(visible);
+  const scope = menu || modal || document;
   const excl = cfg.exclude || [];
   const seen = new Set(); const out = []; let i = 0;
   const text = el => (el.innerText || '').replace(/\\s+/g, ' ').trim();
