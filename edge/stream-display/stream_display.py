@@ -112,7 +112,16 @@ DEFAULT_REGION_RULES = [
     # divs carrying an aria-label like "Kitchen: OFF"; a click toggles them.
     {"selector": ".control-wrapper [role=button], .control-wrapper [role=status], .control-wrapper button, "
                  ".control-wrapper [role=switch]", "kind": "control"},
+    # A control tile's click opens its own popup (portaled to <body>): the plug
+    # popup holds the real switch; the garage popup is status only.
+    {"selector": ".tile-popup button, .tile-popup [role=switch], .tile-popup input, .tile-popup [role=button]", "kind": "popup"},
     {"selector": ".cds--modal.is-visible .cds--modal-close", "kind": "modal", "label": "Close"},
+    # The Dashboards tile page (/view/dashboards): a single click on a tile
+    # opens that dashboard. Its search box is reachable for the type action.
+    {"selector": ".dashboard-tiles-grid .dashboard-tile, .dashboards-grid .dashboard-tile", "kind": "tile",
+     "label_from": ".tile-name"},
+    {"selector": ".tile-view-headerbar input[type=search], .tile-view-headerbar input[type=text], .page-toolbar input[type=search]",
+     "kind": "search", "label": "Search dashboards"},
 ]
 
 
