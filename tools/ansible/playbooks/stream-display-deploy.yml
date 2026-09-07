@@ -1,0 +1,20 @@
+---
+# Stream Display Deployment Playbook
+#
+# Deploys a Chromium kiosk on a virtual X display that streams as
+# change-driven MJPEG over HTTP, controlled over MQTT. Runs natively
+# (no Docker) in a privileged LXC — Chromium comes from Playwright,
+# not apt/snap.
+#
+# Deploys to the `stream` host by default (LXC 105 on trv-srv-002).
+# Override with -e stream_target=<host> for other targets.
+#
+# Deploy:
+#   ansible-playbook playbooks/stream-display-deploy.yml
+
+- name: Deploy Stream Display
+  hosts: "{{ stream_target | default('stream') }}"
+  become: true
+
+  roles:
+    - stream-display

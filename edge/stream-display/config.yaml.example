@@ -1,0 +1,29 @@
+# /etc/stream-display/config.yaml -- rendered by Ansible from inventory;
+# this is the shape. Every value has a default (see stream_display.py), so
+# the rendered file only needs to set what differs -- typically just
+# display.name and display.start_url.
+
+display:
+  name: tv                 # -> MQTT topics display/<name>/...
+  start_url: "http://<dashboard-ip>/?user_id=<guid>"   # required
+  screen:
+    width: 3840
+    height: 2160
+  device_scale: 2
+  max_fps: 30
+  jpeg_quality: 90            # libjpeg-turbo quality, 1-100
+  http_port: 8090
+  idle_grace_s: 10          # no viewer -> stop capture
+  alive_ttl_s: 15           # heartbeat validity
+  keepalive_s: 2            # resend last frame when static
+  vaapi_device: ""          # e.g. /dev/dri/renderD128 to use hardware JPEG encode
+
+mqtt:
+  broker: <mqtt-broker-ip>
+  port: 1883
+  topic_prefix: ""                  # default: "display/<display.name>"
+  dashboard_command_topic: "dashboard/cmd"
+  dashboard_client_id: ""           # reserved; appended as "/<id>" when set
+
+logging:
+  level: INFO

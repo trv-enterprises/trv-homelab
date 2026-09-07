@@ -1,0 +1,189 @@
+---
+# stream-display deployment tasks
+# Chromium kiosk on a virtual X display, streamed as change-driven MJPEG,
+# controlled over MQTT. Runs natively (no Docker) — Chromium comes from
+# Playwright, not apt/snap.
+
+- name: Validate start URL is set
+  ansible.builtin.fail:
+    msg: "stream_display_start_url must be set (host_vars) — no sane default for a kiosk URL."
+  when: stream_display_start_url is not defined or stream_display_start_url == ""
+
+- name: Install system packages
+  ansible.builtin.apt:
+    name:
+      - xvfb
+      - ffmpeg
+      - python3-venv
+      - python3-pip
+      - mesa-va-drivers
+      - libva-drm2
+      - fonts-dejavu-core
+      - fonts-liberation
+      - rsync
+      - libturbojpeg
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Create stream-display system group
+  ansible.builtin.group:
+    name: "{{ stream_display_group }}"
+    system: true
+  become: true
+
+- name: Create stream-display system user
+  ansible.builtin.user:
+    name: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
+    groups: video,render
+    append: true
+    system: true
+    home: "{{ stream_display_deploy_dir }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
+- name: Create deployment directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
+    mode: '0755'
+  become: true
+  loop:
+    - "{{ stream_display_deploy_dir }}"
+    - "{{ stream_display_browsers_path }}"
+    - /etc/stream-display
+
+- name: Sync stream-display source
+  ansible.posix.synchronize:
+    src: "{{ stream_display_src_dir }}/"
+    dest: "{{ stream_display_deploy_dir }}/"
+    delete: true
+    rsync_opts:
+      - "--exclude=venv"
+      - "--exclude=profile"
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+      - "--exclude=browsers"
+      - "--exclude=systemd/"
+      - "--exclude=env.example"
+  notify: Restart stream-display
+
+- name: Fix ownership after sync
+  ansible.builtin.file:
+    path: "{{ stream_display_deploy_dir }}"
+    owner: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
+    recurse: true
+  become: true
+
+- name: Check if venv exists
+  ansible.builtin.stat:
+    path: "{{ stream_display_deploy_dir }}/venv"
+  register: stream_display_venv
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: python3 -m venv venv
+    chdir: "{{ stream_display_deploy_dir }}"
+  become: true
+  become_user: "{{ stream_display_user }}"
+  when: not stream_display_venv.stat.exists
+
+- name: Install Python dependencies
+  ansible.builtin.pip:
+    requirements: "{{ stream_display_deploy_dir }}/requirements.txt"
+    virtualenv: "{{ stream_display_deploy_dir }}/venv"
+  become: true
+  become_user: "{{ stream_display_user }}"
+  notify: Restart stream-display
+
+# `playwright install --with-deps` installs missing OS packages for Chromium
+# via apt, so the deps half needs root; the browser download itself is run
+# with PLAYWRIGHT_BROWSERS_PATH pointed at a directory the stream user owns
+# (created above) so the service can read the binaries it launches.
+- name: Install Chromium via Playwright (with OS deps)
+  ansible.builtin.command:
+    cmd: "{{ stream_display_deploy_dir }}/venv/bin/playwright install --with-deps chromium"
+  environment:
+    PLAYWRIGHT_BROWSERS_PATH: "{{ stream_display_browsers_path }}"
+  become: true
+  register: playwright_install
+  changed_when: "'Downloading' in playwright_install.stdout or 'Installing' in playwright_install.stdout"
+  notify: Restart stream-display
+
+- name: Fix browsers directory ownership after Playwright install
+  ansible.builtin.file:
+    path: "{{ stream_display_browsers_path }}"
+    owner: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
+    recurse: true
+  become: true
+
+- name: Render config.yaml
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/stream-display/config.yaml
+    owner: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
+    mode: '0644'
+  become: true
+  notify: Restart stream-display
+
+- name: Render stream-xvfb.service
+  ansible.builtin.template:
+    src: stream-xvfb.service.j2
+    dest: /etc/systemd/system/stream-xvfb.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart stream-xvfb
+
+- name: Render stream-display.service
+  ansible.builtin.template:
+    src: stream-display.service.j2
+    dest: /etc/systemd/system/stream-display.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart stream-display
+
+- name: Flush handlers to apply units and config before (re)start
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start stream-xvfb
+  ansible.builtin.systemd:
+    name: stream-xvfb
+    enabled: true
+    state: started
+  become: true
+
+- name: Enable and start stream-display
+  ansible.builtin.systemd:
+    name: stream-display
+    enabled: true
+    state: started
+  become: true
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      stream-display deployed successfully!
+
+      Display: {{ stream_display_name }} ({{ stream_display_screen_width }}x{{ stream_display_screen_height }}, scale {{ stream_display_device_scale }})
+      Stream:  http://{{ ansible_host }}:{{ stream_display_http_port }}/stream.mjpeg
+      Health:  http://{{ ansible_host }}:{{ stream_display_http_port }}/health
+
+      Commands:
+        sudo systemctl status stream-xvfb stream-display
+        journalctl -u stream-display -f

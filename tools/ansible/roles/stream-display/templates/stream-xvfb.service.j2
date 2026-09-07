@@ -1,0 +1,13 @@
+[Unit]
+Description=Virtual X display for stream-display
+After=network.target
+
+[Service]
+Type=simple
+User={{ stream_display_user }}
+ExecStart=/usr/bin/Xvfb :99 -screen 0 {{ stream_display_screen_width }}x{{ stream_display_screen_height }}x24 -nolisten tcp -ac +extension RANDR
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

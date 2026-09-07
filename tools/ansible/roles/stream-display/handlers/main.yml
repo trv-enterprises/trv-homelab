@@ -1,0 +1,17 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart stream-xvfb
+  ansible.builtin.systemd:
+    name: stream-xvfb
+    state: restarted
+  become: true
+
+- name: Restart stream-display
+  ansible.builtin.systemd:
+    name: stream-display
+    state: restarted
+  become: true

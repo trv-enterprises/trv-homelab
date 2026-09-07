@@ -1,0 +1,48 @@
+---
+# stream-display defaults — overridable via inventory, group_vars, or host_vars.
+# Real per-host values (start URL, MQTT broker, GUID) live in homelab-deploy's
+# host_vars/stream.yml; this file only holds the shape and safe fallbacks.
+
+# Source directory (relative to the playbook, which lives in this repo).
+stream_display_src_dir: "{{ playbook_dir }}/../../../edge/stream-display"
+
+# Where the service lives on the target host.
+stream_display_deploy_dir: /opt/stream-display
+
+# System user the service and Xvfb run as. Needs `video`/`render` group
+# membership for GPU device access (VAAPI JPEG encode, if enabled).
+stream_display_user: stream
+stream_display_group: stream
+
+# display.name -> MQTT topics display/<name>/...
+stream_display_name: tv
+# Must be provided by inventory/host_vars — no sane default for a kiosk URL.
+stream_display_start_url: ""
+
+# display.screen — must match the Xvfb geometry, so the xvfb unit is
+# rendered from these same values rather than kept as a static file.
+stream_display_screen_width: 3840
+stream_display_screen_height: 2160
+stream_display_device_scale: 2
+stream_display_max_fps: 30
+stream_display_jpeg_quality: 90
+stream_display_http_port: 8090
+stream_display_idle_grace_s: 10
+stream_display_alive_ttl_s: 15
+stream_display_keepalive_s: 2
+# Set to e.g. /dev/dri/renderD128 to use hardware JPEG encode via VAAPI.
+stream_display_vaapi_device: ""
+
+# mqtt.*
+stream_display_mqtt_broker: "127.0.0.1"
+stream_display_mqtt_port: 1883
+stream_display_dashboard_command_topic: "dashboard/cmd"
+stream_display_dashboard_client_id: ""
+
+# logging.level
+stream_display_log_level: INFO
+
+# Playwright downloads Chromium here (not apt/snap) so a browser upgrade is a
+# `playwright install` bump, not a distro package. Kept off the user's home
+# directory and readable by the service user.
+stream_display_browsers_path: "{{ stream_display_deploy_dir }}/browsers"
