@@ -412,11 +412,24 @@ class Display:
         vp = self.page.viewport_size or {"width": self.view_w, "height": self.view_h}
         log.info("browser at %s (%dx%d css px, scale %s)", d.start_url, vp["width"], vp["height"], d.device_scale)
 
+    NUDGE_JS = """() => { const y = window.scrollY;
+        window.scrollBy(0, 1); window.scrollBy(0, -1); window.scrollTo(0, y);
+        window.dispatchEvent(new Event('scroll')); window.dispatchEvent(new Event('resize')); }"""
+
     async def publish_regions(self, reason=""):
         try:
             await self.page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass
+        # Lazy content (dashboard tile thumbnails) waits for a scroll/resize;
+        # on the stream nothing scrolls until the viewer moves focus. Nudge it
+        # after a real navigation so thumbnails load on their own.
+        if reason in ("load", "start", "requested"):
+            try:
+                await self.page.evaluate(self.NUDGE_JS)
+                await self.page.wait_for_timeout(150)
+            except Exception:
+                pass
         try:
             self.regions = await self.page.evaluate(REGIONS_JS, {"rules": self.cfg.regions.rules, "exclude": self.cfg.regions.exclude})
         except Exception as e:
