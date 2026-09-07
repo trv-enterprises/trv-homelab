@@ -27,3 +27,12 @@ mqtt:
 
 logging:
   level: INFO
+# Optional. What the TV can click, in order; omit to use the built-in rules,
+# which know the Outpost dashboard's markup (header controls, chart panels
+# expanded by a single click, controls clicked, the "view data as table" icon).
+#regions:
+#  refresh_s: 5
+#  exclude: [".text-panel"]
+#  rules:
+#    - { selector: "button[aria-label='Notifications']", kind: header, label: Notifications }
+#    - { selector: ".panel-container.has-component:not(.text-panel)", kind: panel, action: dblclick, unless: ".control-wrapper" }

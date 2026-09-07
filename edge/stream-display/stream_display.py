@@ -87,10 +87,46 @@ class LoggingConfig:
     level: str = "INFO"
 
 
+# What counts as a clickable region, in order. Each rule names the elements
+# (a CSS selector), how to label them, what kind they are (for the TV client
+# to style) and what a click on the TV does to them. These defaults know the
+# Outpost dashboard's markup; a config file can replace them wholesale.
+DEFAULT_REGION_RULES = [
+    {"selector": "button[aria-label='Notifications']", "kind": "header", "label": "Notifications"},
+    # Carbon IconButtons keep their label in a tooltip that is not in the DOM
+    # until hovered, so name the three nav buttons by position.
+    {"selector": ".dashboard-nav-buttons > :nth-child(1) button, .dashboard-nav-buttons > button:nth-child(1)", "kind": "nav", "label": "Previous dashboard"},
+    {"selector": ".dashboard-nav-buttons > :nth-child(2) button, .dashboard-nav-buttons > button:nth-child(2)", "kind": "nav", "label": "Home dashboard"},
+    {"selector": ".dashboard-nav-buttons > :nth-child(3) button, .dashboard-nav-buttons > button:nth-child(3)", "kind": "nav", "label": "Dashboards"},
+    {"selector": ".variables-button", "kind": "variables", "label": "Variables"},
+    {"selector": ".dashboard-variable-picker button, .dashboard-variable-picker [role=combobox]", "kind": "variables"},
+    {"selector": ".fit-mode-menu, .fit-mode-menu button", "kind": "header", "label": "Fit to screen"},
+    {"selector": ".toolbar-refresh-btn", "kind": "header", "label": "Refresh"},
+    {"selector": ".chart-panel-actions > button", "kind": "table", "label": "View data as table"},
+    # A chart panel: one click on the TV is the page's double-click (expand).
+    # Text panels are not regions; control panels are handled by the next rule.
+    {"selector": ".panel-container.has-component:not(.text-panel)", "kind": "panel",
+     "action": "dblclick", "unless": ".control-wrapper", "label_from": ".chart-name, .panel-title, h3, h2"},
+    # Control tiles (plug, light, dimmer, garage door) are role=button/status
+    # divs carrying an aria-label like "Kitchen: OFF"; a click toggles them.
+    {"selector": ".control-wrapper [role=button], .control-wrapper [role=status], .control-wrapper button, "
+                 ".control-wrapper [role=switch]", "kind": "control"},
+    {"selector": ".cds--modal.is-visible .cds--modal-close", "kind": "modal", "label": "Close"},
+]
+
+
+@dataclasses.dataclass
+class RegionsConfig:
+    rules: list = dataclasses.field(default_factory=lambda: list(DEFAULT_REGION_RULES))
+    exclude: list = dataclasses.field(default_factory=lambda: [".text-panel"])
+    refresh_s: float = 5           # re-scan while someone is watching
+
+
 @dataclasses.dataclass
 class Config:
     display: DisplayConfig = dataclasses.field(default_factory=DisplayConfig)
     mqtt: MqttConfig = dataclasses.field(default_factory=MqttConfig)
+    regions: RegionsConfig = dataclasses.field(default_factory=RegionsConfig)
     logging: LoggingConfig = dataclasses.field(default_factory=LoggingConfig)
 
 
@@ -146,18 +182,35 @@ def load_config(path: Optional[str]) -> Config:
 
 
 REGIONS_JS = """
-() => {
-  const sel = 'a[href], button, [role=button], [role=tab], [role=link], [role=menuitem], input, select, textarea, summary, [onclick]';
-  const out = []; let i = 0;
-  for (const el of document.querySelectorAll(sel)) {
-    const r = el.getBoundingClientRect();
-    if (r.width < 8 || r.height < 8) continue;
-    if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
-    const st = getComputedStyle(el);
-    if (st.visibility === 'hidden' || st.display === 'none' || st.pointerEvents === 'none') continue;
-    const label = (el.getAttribute('aria-label') || el.innerText || el.value || el.title || el.alt || '').trim().slice(0, 60);
-    out.push({ id: 'r' + (i++), label, x: r.left / innerWidth, y: r.top / innerHeight,
-               w: r.width / innerWidth, h: r.height / innerHeight });
+(cfg) => {
+  // When a modal is open only its contents are reachable; scope the scan to it.
+  const modal = document.querySelector('.cds--modal.is-visible');
+  const scope = modal || document;
+  const excl = cfg.exclude || [];
+  const seen = new Set(); const out = []; let i = 0;
+  const text = el => (el.innerText || '').replace(/\\s+/g, ' ').trim();
+  const labelOf = (el, rule) => {
+    if (rule.label) return rule.label;
+    if (rule.label_from) { const t = el.querySelector(rule.label_from); if (t && text(t)) return text(t).slice(0, 60); }
+    const by = el.getAttribute('aria-labelledby');
+    if (by) { const t = document.getElementById(by); if (t && text(t)) return text(t).slice(0, 60); }
+    return (el.getAttribute('aria-label') || el.title || text(el) || el.getAttribute('data-panel-id') || '').slice(0, 60);
+  };
+  for (const rule of cfg.rules) {
+    let els; try { els = scope.querySelectorAll(rule.selector); } catch (e) { continue; }
+    for (const el of els) {
+      if (seen.has(el)) continue;
+      if (excl.some(x => el.closest(x))) continue;
+      if (rule.unless && el.querySelector(rule.unless)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === 'hidden' || st.display === 'none' || st.pointerEvents === 'none' || st.opacity === '0') continue;
+      seen.add(el);
+      out.push({ id: 'r' + (i++), label: labelOf(el, rule), kind: rule.kind || 'link', action: rule.action || 'click',
+                 x: r.left / innerWidth, y: r.top / innerHeight, w: r.width / innerWidth, h: r.height / innerHeight });
+    }
   }
   return out;
 }
@@ -285,6 +338,7 @@ class Display:
         self.capture = Capture(cfg.display, x_display)
         self.page = None
         self.regions = []
+        self._last_regions = 0.0
         self.cmd_queue: asyncio.Queue = asyncio.Queue()
 
         # CSS-pixel viewport the page lays out in; normalised coordinates map to it.
@@ -335,7 +389,7 @@ class Display:
         except Exception:
             pass
         try:
-            self.regions = await self.page.evaluate(REGIONS_JS)
+            self.regions = await self.page.evaluate(REGIONS_JS, {"rules": self.cfg.regions.rules, "exclude": self.cfg.regions.exclude})
         except Exception as e:
             log.warning("regions failed: %s", e); return
         self.mqtt.publish_regions({"url": self.page.url, "count": len(self.regions), "regions": self.regions})
@@ -353,7 +407,10 @@ class Display:
                     x, y = (r["x"] + r["w"] / 2) * self.view_w, (r["y"] + r["h"] / 2) * self.view_h
                 else:
                     x, y = float(c["x"]) * self.view_w, float(c["y"]) * self.view_h
-                await p.mouse.click(x, y)
+                if "id" in c and r.get("action") == "dblclick":
+                    await p.mouse.dblclick(x, y)
+                else:
+                    await p.mouse.click(x, y)
                 asyncio.create_task(self.publish_regions("click"))
             elif a == "move":
                 await p.mouse.move(float(c["x"]) * self.view_w, float(c["y"]) * self.view_h)
@@ -396,6 +453,11 @@ class Display:
                 idle_since = idle_since or time.monotonic()
                 if time.monotonic() - idle_since > idle_grace:
                     await self.capture.stop(); self.publish_state()
+            # While someone is watching, keep the region map current: pages
+            # rotate, modals open and close, panels re-render.
+            if self.capture.running() and time.monotonic() - self._last_regions > self.cfg.regions.refresh_s:
+                self._last_regions = time.monotonic()
+                asyncio.create_task(self.publish_regions("refresh"))
             await asyncio.sleep(1)
 
     async def commands(self):
