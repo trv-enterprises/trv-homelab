@@ -412,9 +412,20 @@ class Display:
         vp = self.page.viewport_size or {"width": self.view_w, "height": self.view_h}
         log.info("browser at %s (%dx%d css px, scale %s)", d.start_url, vp["width"], vp["height"], d.device_scale)
 
-    NUDGE_JS = """() => { const y = window.scrollY;
-        window.scrollBy(0, 1); window.scrollBy(0, -1); window.scrollTo(0, y);
-        window.dispatchEvent(new Event('scroll')); window.dispatchEvent(new Event('resize')); }"""
+    # Scroll the scrollable container to the bottom, then back to the top, so
+    # every lazily-loaded element crosses the viewport and its
+    # IntersectionObserver fires. Returns the max scrollTop reached; 0 means
+    # nothing scrolls (already all in view) and the caller skips the wait.
+    NUDGE_JS = """() => {
+      const doc = document.scrollingElement || document.documentElement;
+      const cands = [doc, ...document.querySelectorAll('*')].filter(el =>
+        el.scrollHeight - el.clientHeight > 40 && getComputedStyle(el).overflowY !== 'visible');
+      const el = cands.sort((a,b) => (b.scrollHeight-b.clientHeight)-(a.scrollHeight-a.clientHeight))[0] || doc;
+      const max = el.scrollHeight - el.clientHeight;
+      el.scrollTop = max; el.dispatchEvent(new Event('scroll', {bubbles:true}));
+      window.dispatchEvent(new Event('scroll')); window.dispatchEvent(new Event('resize'));
+      return max;
+    }"""
 
     async def publish_regions(self, reason=""):
         try:
@@ -426,8 +437,12 @@ class Display:
         # after a real navigation so thumbnails load on their own.
         if reason in ("load", "start", "requested"):
             try:
-                await self.page.evaluate(self.NUDGE_JS)
-                await self.page.wait_for_timeout(150)
+                scrolled = await self.page.evaluate(self.NUDGE_JS)
+                if scrolled and scrolled > 0:
+                    await self.page.wait_for_timeout(500)         # let observers fire + images fetch
+                    await self.page.evaluate("() => { const el = document.scrollingElement; "
+                        "const c=[el,...document.querySelectorAll('*')].filter(e=>e.scrollTop>0)[0]||el; "
+                        "c.scrollTop=0; c.dispatchEvent(new Event('scroll',{bubbles:true})); }")
             except Exception:
                 pass
         try:
