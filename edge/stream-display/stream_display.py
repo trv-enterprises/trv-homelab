@@ -127,8 +127,6 @@ DEFAULT_REGION_RULES = [
     # opens that dashboard. Its search box is reachable for the type action.
     {"selector": ".dashboard-tiles-grid .dashboard-tile, .dashboards-grid .dashboard-tile", "kind": "tile",
      "label_from": ".tile-name"},
-    {"selector": ".tile-view-headerbar input[type=search], .tile-view-headerbar input[type=text], .page-toolbar input[type=search]",
-     "kind": "search", "label": "Search dashboards"},
 ]
 
 
@@ -427,28 +425,40 @@ class Display:
       return max;
     }"""
 
-    async def publish_regions(self, reason=""):
+    async def _scan_and_publish(self):
         try:
-            await self.page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            pass
-        # Lazy content (dashboard tile thumbnails) waits for a scroll/resize;
-        # on the stream nothing scrolls until the viewer moves focus. Nudge it
-        # after a real navigation so thumbnails load on their own.
+            self.regions = await self.page.evaluate(
+                REGIONS_JS, {"rules": self.cfg.regions.rules, "exclude": self.cfg.regions.exclude})
+        except Exception as e:
+            log.warning("regions failed: %s", e); return False
+        self._decorate_and_publish()
+        return True
+
+    async def publish_regions(self, reason=""):
+        # Publish the region overlay as soon as the DOM exists -- do NOT wait
+        # on networkidle (a live-data page may never reach it) or on the
+        # thumbnail nudge. The overlay is what the viewer's remote needs first.
+        await self._scan_and_publish()
+        # Then the slow, best-effort work, and one more publish with whatever
+        # changed. Only on a real navigation, not the periodic refresh.
         if reason in ("load", "start", "requested"):
+            try:
+                await self.page.wait_for_load_state("networkidle", timeout=3000)
+            except Exception:
+                pass
             try:
                 scrolled = await self.page.evaluate(self.NUDGE_JS)
                 if scrolled and scrolled > 0:
-                    await self.page.wait_for_timeout(500)         # let observers fire + images fetch
+                    await self.page.wait_for_timeout(500)         # observers fire + images fetch
                     await self.page.evaluate("() => { const el = document.scrollingElement; "
                         "const c=[el,...document.querySelectorAll('*')].filter(e=>e.scrollTop>0)[0]||el; "
                         "c.scrollTop=0; c.dispatchEvent(new Event('scroll',{bubbles:true})); }")
             except Exception:
                 pass
-        try:
-            self.regions = await self.page.evaluate(REGIONS_JS, {"rules": self.cfg.regions.rules, "exclude": self.cfg.regions.exclude})
-        except Exception as e:
-            log.warning("regions failed: %s", e); return
+            await self._scan_and_publish()
+        return
+    # (unreachable tail below kept structurally; replaced by _decorate_and_publish)
+    def _decorate_and_publish(self):
         # An open menu or popup gets a synthetic "Close" region so a viewer can
         # always back out by selecting something, whatever its remote does.
         if self.regions and self.regions[0].get("kind") in ("menu", "popup"):
@@ -457,7 +467,7 @@ class Display:
                                  "x": first["x"], "y": max(0.0, first["y"] - first["h"] * 1.1),
                                  "w": first["w"], "h": first["h"]})
         self.mqtt.publish_regions({"url": self.page.url, "count": len(self.regions), "regions": self.regions})
-        log.info("regions: %d (%s)", len(self.regions), reason)
+        log.info("regions: %d", len(self.regions))
 
     async def handle_cmd(self, c: dict):
         a = c.get("action"); p = self.page
