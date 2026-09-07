@@ -25,6 +25,7 @@ stream_display_screen_width: 3840
 stream_display_screen_height: 2160
 stream_display_device_scale: 2
 stream_display_max_fps: 30
+stream_display_output_fps: 10
 stream_display_jpeg_quality: 90
 stream_display_http_port: 8090
 stream_display_idle_grace_s: 10

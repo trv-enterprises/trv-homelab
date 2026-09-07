@@ -9,6 +9,7 @@ display:
   screen: { width: {{ stream_display_screen_width }}, height: {{ stream_display_screen_height }} }
   device_scale: {{ stream_display_device_scale }}
   max_fps: {{ stream_display_max_fps }}
+  output_fps: {{ stream_display_output_fps | default(10) }}
   jpeg_quality: {{ stream_display_jpeg_quality }}
   http_port: {{ stream_display_http_port }}
   idle_grace_s: {{ stream_display_idle_grace_s }}

@@ -11,6 +11,7 @@ display:
     height: 2160
   device_scale: 2
   max_fps: 30
+  output_fps: 10            # cap on frames sent (a busy panel streams at this, not 30)
   jpeg_quality: 90            # libjpeg-turbo quality, 1-100
   http_port: 8090
   idle_grace_s: 10          # no viewer -> stop capture

@@ -64,7 +64,8 @@ class DisplayConfig:
     start_url: str = ""
     screen: ScreenConfig = dataclasses.field(default_factory=ScreenConfig)
     device_scale: float = 2
-    max_fps: int = 30
+    max_fps: int = 30          # x11grab capture rate
+    output_fps: int = 10       # cap on frames sent; a busy panel streams at this, not 30
     jpeg_quality: int = 90          # ffmpeg -q:v, 2 (best) .. 31
     http_port: int = 8090
     idle_grace_s: float = 10       # no viewer -> stop capture
@@ -310,6 +311,13 @@ class Capture:
         n = w * h * 3 // 2
         loop = asyncio.get_running_loop()
         pending: collections.deque = collections.deque()   # keep frames in order
+        # A panel that repaints every frame (a live chart, a CSS animation)
+        # would otherwise stream at the full capture rate and read as flicker.
+        # Cap the emit rate: within one interval the latest changed frame wins,
+        # the rest are dropped before encoding. A static screen still sends
+        # nothing; motion is smoothed to output_fps.
+        min_interval = 1.0 / max(1, self.cfg.output_fps)
+        last_emit = 0.0
         try:
             while True:
                 try:
@@ -317,7 +325,9 @@ class Capture:
                 except asyncio.IncompleteReadError:
                     break
                 self.grabbed += 1
-                if self._changed(memoryview(raw)[: w * h]):
+                now = time.monotonic()
+                if self._changed(memoryview(raw)[: w * h]) and (now - last_emit) >= min_interval:
+                    last_emit = now
                     pending.append(loop.run_in_executor(self._pool, self._jpeg.encode_from_yuv,
                                                         raw, h, w, self.cfg.jpeg_quality, TJSAMP_420))
                 # Publish finished encodes in order on EVERY grabbed frame -- not only
