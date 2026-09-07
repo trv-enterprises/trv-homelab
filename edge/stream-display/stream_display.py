@@ -98,6 +98,7 @@ DEFAULT_REGION_RULES = [
     {"selector": ".dashboard-nav-buttons > :nth-child(1) button, .dashboard-nav-buttons > button:nth-child(1)", "kind": "nav", "label": "Previous dashboard"},
     {"selector": ".dashboard-nav-buttons > :nth-child(2) button, .dashboard-nav-buttons > button:nth-child(2)", "kind": "nav", "label": "Home dashboard"},
     {"selector": ".dashboard-nav-buttons > :nth-child(3) button, .dashboard-nav-buttons > button:nth-child(3)", "kind": "nav", "label": "Dashboards"},
+    {"selector": ".dashboard-nav-buttons > :nth-child(4) button, .dashboard-nav-buttons > button:nth-child(4)", "kind": "nav", "label": "Next dashboard"},
     {"selector": ".variables-button", "kind": "variables", "label": "Variables"},
     {"selector": ".dashboard-variable-picker button, .dashboard-variable-picker [role=combobox]", "kind": "variables"},
     {"selector": ".fit-mode-menu, .fit-mode-menu button", "kind": "header", "label": "Fit to screen"},

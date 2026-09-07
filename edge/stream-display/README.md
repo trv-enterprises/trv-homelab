@@ -70,3 +70,16 @@ make deploy-stream-display   # from homelab-deploy
 
 Applies `tools/ansible/roles/stream-display/` (this repo) using real values
 from `homelab-deploy/inventory/host_vars/stream.yml`.
+
+## Regions
+
+`display/<name>/regions` carries `{id, label, kind, action, x, y, w, h}` per
+element (normalised 0–1). `kind` is for the client to style (`header`, `nav`,
+`variables`, `table`, `panel`, `control`, `modal`); `action` is what a
+`click{id}` does on the page — `click`, or `dblclick` for chart panels, whose
+double-click is the dashboard's expand. Which elements are regions comes from
+an ordered rule list (`regions.rules` in the config; see `DEFAULT_REGION_RULES`
+in `stream_display.py` for the Outpost defaults). Text panels are never
+regions; disabled controls drop out while disabled; when a modal is open only
+the modal's contents are reachable. The map is re-scanned every
+`regions.refresh_s` seconds while someone is watching.
