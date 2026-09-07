@@ -83,3 +83,27 @@ in `stream_display.py` for the Outpost defaults). Text panels are never
 regions; disabled controls drop out while disabled; when a modal is open only
 the modal's contents are reachable. The map is re-scanned every
 `regions.refresh_s` seconds while someone is watching.
+
+## Multiple displays on one host
+
+Each Apple TV needs its own instance: its own browser, Xvfb, service, port and
+MQTT topic. They share the code, venv and Chromium; only the config and the two
+systemd units are per-instance (templated as `stream-display@<name>` /
+`stream-xvfb@<name>`).
+
+Add a display by adding an entry to `stream_display_instances` in
+homelab-deploy `inventory/host_vars/<host>.yml` — a unique `name`, `http_port`,
+`xdisplay` (Xvfb `:N`), and `start_url`; any other key overrides the
+`stream_display_*` default for that instance (e.g. a 1080p office TV):
+
+```yaml
+stream_display_instances:
+  - { name: tv,        http_port: 8090, xdisplay: 99,  start_url: "http://.../?user_id=<guid>" }
+  - { name: tv-office, http_port: 8091, xdisplay: 100, start_url: "http://.../?user_id=<guid>",
+      screen_width: 1920, screen_height: 1080, device_scale: 1 }
+```
+
+Then `make deploy-stream-display`. In the tvOS app's Settings, point each TV at
+its instance's port and set its display name to match (`tv`, `tv-office`, …).
+One `stream-display` instance drives one browser, so a second TV needs a second
+instance, not a second viewer of the first.

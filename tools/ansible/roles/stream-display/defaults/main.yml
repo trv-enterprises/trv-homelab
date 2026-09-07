@@ -19,6 +19,20 @@ stream_display_name: tv
 # Must be provided by inventory/host_vars — no sane default for a kiosk URL.
 stream_display_start_url: ""
 
+# Multiple displays on one host: each entry is its own browser + Xvfb + service
+# + config, on its own port and MQTT topic. Keys per entry:
+#   name (required), start_url (required), http_port, xdisplay (Xvfb :N),
+#   plus any config override (screen_width/height, device_scale, max_fps,
+#   output_fps, jpeg_quality, mqtt_broker, mqtt_port, vaapi_device, ...).
+# Omitted keys fall back to the stream_display_* scalars above.
+# The default is a single instance built from those scalars, so existing
+# single-display hosts need no change.
+stream_display_instances:
+  - name: "{{ stream_display_name }}"
+    start_url: "{{ stream_display_start_url }}"
+    http_port: "{{ stream_display_http_port }}"
+    xdisplay: 99
+
 # display.screen — must match the Xvfb geometry, so the xvfb unit is
 # rendered from these same values rather than kept as a static file.
 stream_display_screen_width: 3840

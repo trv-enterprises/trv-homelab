@@ -1,26 +1,24 @@
-# /etc/stream-display/config.yaml -- rendered by Ansible (stream-display role).
-# Do not edit by hand; edits are overwritten on the next deploy. Source:
-# trv-homelab/tools/ansible/roles/stream-display/templates/config.yaml.j2,
-# values from homelab-deploy/inventory/host_vars/{{ inventory_hostname }}.yml.
-
+# /etc/stream-display/{{ inst.name }}.yaml -- rendered by Ansible (stream-display
+# role). Do not edit by hand; edits are overwritten on the next deploy.
+# Per-instance value, then the stream_display_* host/default fallback.
 display:
-  name: {{ stream_display_name }}
-  start_url: "{{ stream_display_start_url }}"
-  screen: { width: {{ stream_display_screen_width }}, height: {{ stream_display_screen_height }} }
-  device_scale: {{ stream_display_device_scale }}
-  max_fps: {{ stream_display_max_fps }}
-  output_fps: {{ stream_display_output_fps | default(10) }}
-  jpeg_quality: {{ stream_display_jpeg_quality }}
-  http_port: {{ stream_display_http_port }}
-  idle_grace_s: {{ stream_display_idle_grace_s }}
-  alive_ttl_s: {{ stream_display_alive_ttl_s }}
-  keepalive_s: {{ stream_display_keepalive_s }}
-  vaapi_device: "{{ stream_display_vaapi_device }}"
+  name: {{ inst.name }}
+  start_url: "{{ inst.start_url }}"
+  screen: { width: {{ inst.screen_width | default(stream_display_screen_width) }}, height: {{ inst.screen_height | default(stream_display_screen_height) }} }
+  device_scale: {{ inst.device_scale | default(stream_display_device_scale) }}
+  max_fps: {{ inst.max_fps | default(stream_display_max_fps) }}
+  output_fps: {{ inst.output_fps | default(stream_display_output_fps) }}
+  jpeg_quality: {{ inst.jpeg_quality | default(stream_display_jpeg_quality) }}
+  http_port: {{ inst.http_port | default(stream_display_http_port) }}
+  idle_grace_s: {{ inst.idle_grace_s | default(stream_display_idle_grace_s) }}
+  alive_ttl_s: {{ inst.alive_ttl_s | default(stream_display_alive_ttl_s) }}
+  keepalive_s: {{ inst.keepalive_s | default(stream_display_keepalive_s) }}
+  vaapi_device: "{{ inst.vaapi_device | default(stream_display_vaapi_device) }}"
 mqtt:
-  broker: {{ stream_display_mqtt_broker }}
-  port: {{ stream_display_mqtt_port }}
-  topic_prefix: "display/{{ stream_display_name }}"
-  dashboard_command_topic: "{{ stream_display_dashboard_command_topic }}"
-  dashboard_client_id: "{{ stream_display_dashboard_client_id }}"
+  broker: {{ inst.mqtt_broker | default(stream_display_mqtt_broker) }}
+  port: {{ inst.mqtt_port | default(stream_display_mqtt_port) }}
+  topic_prefix: "display/{{ inst.name }}"
+  dashboard_command_topic: "{{ inst.dashboard_command_topic | default(stream_display_dashboard_command_topic) }}"
+  dashboard_client_id: "{{ inst.dashboard_client_id | default(stream_display_dashboard_client_id) }}"
 logging:
-  level: {{ stream_display_log_level }}
+  level: {{ inst.log_level | default(stream_display_log_level) }}

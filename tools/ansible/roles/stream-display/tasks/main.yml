@@ -4,10 +4,12 @@
 # controlled over MQTT. Runs natively (no Docker) — Chromium comes from
 # Playwright, not apt/snap.
 
-- name: Validate start URL is set
+- name: Validate every instance has a name and start URL
   ansible.builtin.fail:
-    msg: "stream_display_start_url must be set (host_vars) — no sane default for a kiosk URL."
-  when: stream_display_start_url is not defined or stream_display_start_url == ""
+    msg: "each stream_display_instances entry needs a non-empty name and start_url (set in host_vars)."
+  loop: "{{ stream_display_instances }}"
+  loop_control: { label: "{{ item.name | default('?') }}" }
+  when: (item.name | default('')) == "" or (item.start_url | default('')) == ""
 
 - name: Install system packages
   ansible.builtin.apt:
@@ -71,7 +73,6 @@
       - "--exclude=browsers"
       - "--exclude=systemd/"
       - "--exclude=env.example"
-  notify: Restart stream-display
 
 - name: Fix ownership after sync
   ansible.builtin.file:
@@ -100,7 +101,6 @@
     virtualenv: "{{ stream_display_deploy_dir }}/venv"
   become: true
   become_user: "{{ stream_display_user }}"
-  notify: Restart stream-display
 
 # `playwright install --with-deps` installs missing OS packages for Chromium
 # via apt, so the deps half needs root; the browser download itself is run
@@ -114,7 +114,6 @@
   become: true
   register: playwright_install
   changed_when: "'Downloading' in playwright_install.stdout or 'Installing' in playwright_install.stdout"
-  notify: Restart stream-display
 
 - name: Fix browsers directory ownership after Playwright install
   ansible.builtin.file:
@@ -124,66 +123,89 @@
     recurse: true
   become: true
 
-- name: Render config.yaml
+# --- templated systemd units (one pair serves all instances) ---
+- name: Render templated systemd units
   ansible.builtin.template:
-    src: config.yaml.j2
-    dest: /etc/stream-display/config.yaml
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  loop:
+    - stream-xvfb@.service
+    - stream-display@.service
+  notify: Reload systemd
+
+# --- retire the old single-instance units if upgrading from a pre-multi host ---
+- name: Stop and disable the legacy single-instance units
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  become: true
+  loop:
+    - stream-display.service
+    - stream-xvfb.service
+  failed_when: false
+  register: legacy_units
+
+- name: Remove the legacy single-instance unit files and config
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /etc/systemd/system/stream-display.service
+    - /etc/systemd/system/stream-xvfb.service
+    - /etc/stream-display/config.yaml
+  notify: Reload systemd
+
+# --- per-instance config, X-env, and services ---
+- name: Render per-instance X environment (Xvfb display + geometry)
+  ansible.builtin.template:
+    src: xenv.j2
+    dest: "/etc/stream-display/{{ inst.name }}.xenv"
     owner: "{{ stream_display_user }}"
     group: "{{ stream_display_group }}"
     mode: '0644'
   become: true
-  notify: Restart stream-display
+  loop: "{{ stream_display_instances }}"
+  loop_control: { loop_var: inst, label: "{{ inst.name }}" }
 
-- name: Render stream-xvfb.service
+- name: Render per-instance config
   ansible.builtin.template:
-    src: stream-xvfb.service.j2
-    dest: /etc/systemd/system/stream-xvfb.service
-    owner: root
-    group: root
+    src: config.yaml.j2
+    dest: "/etc/stream-display/{{ inst.name }}.yaml"
+    owner: "{{ stream_display_user }}"
+    group: "{{ stream_display_group }}"
     mode: '0644'
   become: true
-  notify:
-    - Reload systemd
-    - Restart stream-xvfb
+  loop: "{{ stream_display_instances }}"
+  loop_control: { loop_var: inst, label: "{{ inst.name }}" }
 
-- name: Render stream-display.service
-  ansible.builtin.template:
-    src: stream-display.service.j2
-    dest: /etc/systemd/system/stream-display.service
-    owner: root
-    group: root
-    mode: '0644'
-  become: true
-  notify:
-    - Reload systemd
-    - Restart stream-display
-
-- name: Flush handlers to apply units and config before (re)start
-  ansible.builtin.meta: flush_handlers
-
-- name: Enable and start stream-xvfb
+- name: Reload systemd before (re)starting instances
   ansible.builtin.systemd:
-    name: stream-xvfb
-    enabled: true
-    state: started
+    daemon_reload: true
   become: true
 
-- name: Enable and start stream-display
+- name: Enable and (re)start each instance
   ansible.builtin.systemd:
-    name: stream-display
+    name: "{{ item.1 }}@{{ item.0.name }}.service"
     enabled: true
-    state: started
+    state: restarted
   become: true
+  loop: "{{ stream_display_instances | product(['stream-xvfb', 'stream-display']) | list }}"
+  loop_control:
+    label: "{{ item.1 }}@{{ item.0.name }}"
 
 - name: Display deployment status
   ansible.builtin.debug:
     msg: |
-      stream-display deployed successfully!
-
-      Display: {{ stream_display_name }} ({{ stream_display_screen_width }}x{{ stream_display_screen_height }}, scale {{ stream_display_device_scale }})
-      Stream:  http://{{ ansible_host }}:{{ stream_display_http_port }}/stream.mjpeg
-      Health:  http://{{ ansible_host }}:{{ stream_display_http_port }}/health
-
+      stream-display deployed successfully — {{ stream_display_instances | length }} instance(s):
+      {% for i in stream_display_instances %}
+        {{ i.name }}: Xvfb :{{ i.xdisplay | default(99) }}  ->  http://{{ ansible_host }}:{{ i.http_port | default(stream_display_http_port) }}/stream.mjpeg   (topics display/{{ i.name }}/*)
+      {% endfor %}
       Commands:
-        sudo systemctl status stream-xvfb stream-display
-        journalctl -u stream-display -f
+        systemctl status 'stream-display@*'
+        journalctl -u stream-display@<name> -f

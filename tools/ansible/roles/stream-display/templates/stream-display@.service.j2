@@ -1,0 +1,20 @@
+[Unit]
+Description=stream-display %i: dashboard as change-driven MJPEG, MQTT-controlled
+After=network-online.target stream-xvfb@%i.service
+Requires=stream-xvfb@%i.service
+
+[Service]
+Type=simple
+User={{ stream_display_user }}
+WorkingDirectory={{ stream_display_deploy_dir }}
+EnvironmentFile=/etc/stream-display/%i.xenv
+Environment=DISPLAY=:${XNUM}
+Environment=PLAYWRIGHT_BROWSERS_PATH={{ stream_display_browsers_path }}
+ExecStart={{ stream_display_deploy_dir }}/venv/bin/python {{ stream_display_deploy_dir }}/stream_display.py --config /etc/stream-display/%i.yaml
+TimeoutStopSec=15
+KillMode=mixed
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

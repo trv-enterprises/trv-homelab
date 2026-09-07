@@ -1,0 +1,16 @@
+[Unit]
+Description=Virtual X display for stream-display %i
+After=network.target
+
+[Service]
+Type=simple
+User={{ stream_display_user }}
+# %i is the instance name; the map from name to Xvfb :N and geometry is written
+# to /etc/stream-display/%i.xenv by the role.
+EnvironmentFile=/etc/stream-display/%i.xenv
+ExecStart=/usr/bin/Xvfb :${XNUM} -screen 0 ${XGEOM}x24 -nolisten tcp -ac +extension RANDR
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
