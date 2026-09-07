@@ -58,6 +58,7 @@
   loop:
     - "{{ stream_display_deploy_dir }}"
     - "{{ stream_display_browsers_path }}"
+    - "{{ stream_display_deploy_dir }}/profiles"
     - /etc/stream-display
 
 - name: Sync stream-display source

@@ -7,9 +7,11 @@ Requires=stream-xvfb@%i.service
 Type=simple
 User={{ stream_display_user }}
 WorkingDirectory={{ stream_display_deploy_dir }}
+# DISPLAY (and XNUM/XGEOM) come from the EnvironmentFile; systemd does not
+# expand ${XNUM} inside an Environment= line, so DISPLAY is set there directly.
 EnvironmentFile=/etc/stream-display/%i.xenv
-Environment=DISPLAY=:${XNUM}
 Environment=PLAYWRIGHT_BROWSERS_PATH={{ stream_display_browsers_path }}
+Environment=PROFILE_DIR={{ stream_display_deploy_dir }}/profiles/%i
 ExecStart={{ stream_display_deploy_dir }}/venv/bin/python {{ stream_display_deploy_dir }}/stream_display.py --config /etc/stream-display/%i.yaml
 TimeoutStopSec=15
 KillMode=mixed

@@ -390,8 +390,11 @@ class Display:
         # the one --kiosk applies to; launch()+new_context() opens a second,
         # chromed window and the kiosk flag is ignored. The profile directory
         # also keeps the dashboard's identity (localStorage) across restarts.
+        profile = os.environ.get("PROFILE_DIR") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "profile-" + d.name)
+        os.makedirs(profile, exist_ok=True)
         ctx = await pw.chromium.launch_persistent_context(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "profile"),
+            profile,
             headless=False, no_viewport=True, ignore_https_errors=True,
             env={**os.environ, "DISPLAY": os.environ.get("DISPLAY", ":99")},
             args=["--kiosk", "--start-fullscreen", "--no-first-run", "--disable-infobars",
