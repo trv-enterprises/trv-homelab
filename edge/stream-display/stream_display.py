@@ -435,7 +435,35 @@ class Display:
         except Exception as e:
             log.warning("regions failed: %s", e); return False
         self._decorate_and_publish()
+        await self._recover_if_blank()
         return True
+
+    async def _recover_if_blank(self):
+        """Reload a page that has rendered nothing.
+
+        An Outpost page occasionally comes up empty -- no regions, and a frame
+        that is just the background. It stays that way until something forces a
+        re-render, which a viewer sees as a blank screen. Any app page should
+        have at least the header controls, so a run of empty scans means the
+        page is broken rather than merely sparse; reload it once and let the
+        next scan confirm. Guarded so a genuinely region-less page cannot loop.
+        """
+        if self.regions:
+            self._blank_scans = 0
+            return
+        self._blank_scans = getattr(self, "_blank_scans", 0) + 1
+        if self._blank_scans < 3:                       # ~15 s of empty scans
+            return
+        if time.monotonic() - getattr(self, "_last_recover", 0) < 120:
+            return                                      # at most one reload every 2 min
+        self._last_recover = time.monotonic()
+        self._blank_scans = 0
+        log.warning("page has rendered no regions; reloading %s", self.page.url)
+        try:
+            await self.page.reload(wait_until="domcontentloaded")
+            await self._scan_and_publish()
+        except Exception as e:
+            log.warning("reload failed: %s", e)
 
     async def publish_regions(self, reason=""):
         # Publish the region overlay as soon as the DOM exists -- do NOT wait
