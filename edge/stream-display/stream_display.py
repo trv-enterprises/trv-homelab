@@ -458,12 +458,20 @@ class Display:
             return                                      # at most one reload every 2 min
         self._last_recover = time.monotonic()
         self._blank_scans = 0
-        log.warning("page has rendered no regions; reloading %s", self.page.url)
+        url = self.page.url or ""
+        origin = "/".join(self.cfg.display.start_url.split("/", 3)[:3])
         try:
-            await self.page.reload(wait_until="domcontentloaded")
+            if not url.startswith(origin):
+                # about:blank or somewhere outside the app: reloading it would
+                # just reload nothing. Go back to the configured start URL.
+                log.warning("page is off-app (%s); returning to the start URL", url)
+                await self.page.goto(self.cfg.display.start_url, wait_until="domcontentloaded")
+            else:
+                log.warning("page has rendered no regions; reloading %s", url)
+                await self.page.reload(wait_until="domcontentloaded")
             await self._scan_and_publish()
         except Exception as e:
-            log.warning("reload failed: %s", e)
+            log.warning("recovery failed: %s", e)
 
     async def publish_regions(self, reason=""):
         # Publish the region overlay as soon as the DOM exists -- do NOT wait
@@ -532,7 +540,16 @@ class Display:
             elif a == "reload":
                 await p.reload(wait_until="domcontentloaded")
             elif a == "back":
+                # Never let Back walk out of the app: the browser is shared and
+                # long-lived, so landing on about:blank (or anywhere outside
+                # Outpost) strands every viewer on a blank page. Go back only if
+                # that keeps us on the start URL's origin; otherwise go home.
+                origin = self.cfg.display.start_url.split("/", 3)[:3]
+                origin = "/".join(origin)
                 await p.go_back()
+                if not (p.url or "").startswith(origin):
+                    log.info("back would leave the app (%s); returning home", p.url)
+                    await p.goto(self.cfg.display.start_url, wait_until="domcontentloaded")
             elif a == "forward":
                 await p.go_forward()
             elif a == "regions":
