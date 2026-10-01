@@ -1,5 +1,5 @@
 ---
-# sentinel deployment configuration
+# sentinel deployment defaults (lowest precedence: host_vars in the deploy inventory override these)
 
 ghcr_registry: ghcr.io/trv-enterprises
 sentinel_image: "{{ ghcr_registry }}/sentinel"
