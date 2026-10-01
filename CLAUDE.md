@@ -43,15 +43,16 @@ the design is what it is, which is not recoverable from the code:
 
 ## Go Services
 
-One Go module lives here, building to a container published on GHCR under the
-`trv-enterprises` org. (Marshal, the former alert engine, moved to its own repo
+Two Go modules live here, each building to a container published on GHCR under
+the `trv-enterprises` org. (Marshal, the former alert engine, moved to its own repo
 — see Related Repos.)
 
 | Service | Module path | Purpose |
 |---|---|---|
 | `edge/weather-poller/` | `github.com/trv-enterprises/trv-homelab/edge/weather-poller` | Visual Crossing -> MQTT |
+| `edge/sentinel/` | `github.com/trv-enterprises/trv-homelab/edge/sentinel` | Marshal + Frigate alerts -> SQLite -> APNs push + API for the trv-sentinel iOS app (see its CLAUDE.md) |
 
-It uses the path-based module name, so the import path matches where it
+They use the path-based module name, so the import path matches where it
 actually lives. Keep it that way when adding another.
 
 ### Marshal (moved out)
@@ -167,6 +168,7 @@ ansible-playbook -i <inventory> playbooks/nut-client-deploy.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-deploy.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-setup.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-setup-minisforum.yml
+ansible-playbook -i <inventory> playbooks/sentinel-deploy.yml
 ansible-playbook -i <inventory> playbooks/server-report.yml
 ansible-playbook -i <inventory> playbooks/simulators-deploy.yml
 ansible-playbook -i <inventory> playbooks/synology-snmp-deploy.yml
@@ -174,7 +176,7 @@ ansible-playbook -i <inventory> playbooks/tsstore-deploy.yml
 ansible-playbook -i <inventory> playbooks/weather-poller-deploy.yml
 ```
 
-Roles: `marshal`, `dashboard`, `nut-client`, `server-report`,
+Roles: `marshal`, `dashboard`, `nut-client`, `sentinel`, `server-report`,
 `services-stack`, `simulators`, `tsstore`, `voice-display`, `weather-poller`.
 
 `services-stack` owns the shared `docker-compose.yml` for the services LXC.
@@ -263,6 +265,7 @@ broker bridges selected topics to it rather than being consumed directly.
 | `caseta/<device>` | bridge -> broker | Caseta device state |
 | `caseta/<device>/set` | broker -> bridge | Caseta device commands |
 | `sensors/alerts` | Marshal -> broker | Alert events |
+| `sentinel/heartbeat` | sentinel -> itself | Liveness loopback for the alert push server |
 | `weather/*` | poller -> broker | Current conditions, forecasts, alerts |
 | `frigate/reviews` | NVR bridge -> broker | Detection events |
 | `automation/<name>/enable` | any -> engine | Park/resume an automation rule |
@@ -292,6 +295,7 @@ hardware with different IPs?* If yes, it belongs here. Prefer a nested
 ## Related Repos
 
 - [trv-kiosk](https://github.com/trv-enterprises/trv-kiosk) -- Voice-controlled smart display (React + Python)
+- [trv-sentinel](https://github.com/trv-enterprises/trv-sentinel) -- iOS app fed by `edge/sentinel` (alerts, clips, push)
 - [trv-marshal](https://github.com/trv-enterprises/trv-marshal) -- Marshal, the MQTT automation engine (split out of this repo 2026-08-26)
 - `homelab-deploy` (private) -- real inventory, vault, host_vars, `make` deploy targets
 - `trv-outpost-sim` -- simulator services, synced into the `simulators` role at deploy time

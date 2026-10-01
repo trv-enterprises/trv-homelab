@@ -1,0 +1,89 @@
+---
+# sentinel deployment tasks (services LXC, compose stack owned by services-stack)
+
+- name: Validate API token
+  ansible.builtin.fail:
+    msg: "sentinel_api_token is required (>= 16 chars). Set in vault."
+  when: sentinel_api_token is not defined or sentinel_api_token | length < 16
+
+# APNs is optional so the server can be deployed and exercised before the
+# Apple side exists; the server logs "push disabled" in that case.
+- name: Warn when APNs is not configured
+  ansible.builtin.debug:
+    msg: "apns_key_b64/apns_key_id/apns_team_id/apns_bundle_id not all set — deploying with push DISABLED."
+  when: >
+    apns_key_b64 is not defined or apns_key_b64 | length == 0 or
+    apns_key_id is not defined or apns_team_id is not defined or apns_bundle_id is not defined
+
+- name: Deploy sentinel env file
+  ansible.builtin.template:
+    src: sentinel.env.j2
+    dest: "{{ services_deploy_dir }}/sentinel.env"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+  become: true
+  register: env_file
+
+- name: Pull sentinel image
+  ansible.builtin.command:
+    cmd: docker compose pull sentinel
+    chdir: "{{ services_deploy_dir }}"
+  register: pull_result
+  changed_when: "'Downloaded' in pull_result.stderr or 'Pulled' in pull_result.stderr"
+
+- name: Start/update sentinel
+  ansible.builtin.command:
+    cmd: docker compose up -d sentinel
+    chdir: "{{ services_deploy_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Wait for sentinel to start
+  ansible.builtin.command:
+    cmd: docker compose ps sentinel --format json
+    chdir: "{{ services_deploy_dir }}"
+  register: compose_ps
+  until: "'running' in compose_ps.stdout"
+  retries: 6
+  delay: 5
+  changed_when: false
+
+# Front the loopback-only port with Tailscale's HTTPS cert so the phone gets
+# a trusted https://<host>.<tailnet>.ts.net endpoint and no ATS exception.
+# `tailscale serve` persists its config in tailscaled, so this is one-shot
+# and idempotent (re-running with the same args is a no-op).
+- name: Expose sentinel over tailscale serve (HTTPS)
+  ansible.builtin.command:
+    cmd: "tailscale serve --bg --https=443 http://127.0.0.1:{{ sentinel_http_port }}"
+  become: true
+  when: sentinel_tailscale_serve | bool
+  register: ts_serve
+  changed_when: "'Available within your tailnet' in ts_serve.stdout"
+  failed_when: ts_serve.rc != 0 and 'already' not in ts_serve.stderr
+
+- name: Check health
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ sentinel_http_port }}/healthz"
+    status_code: [200, 503]
+  register: health
+  retries: 6
+  delay: 5
+  until: health.status == 200
+
+- name: Show recent logs
+  ansible.builtin.command:
+    cmd: docker compose logs --tail=10 sentinel
+    chdir: "{{ services_deploy_dir }}"
+  register: sentinel_logs
+  changed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      sentinel deployed.
+      Image: {{ sentinel_image }}:{{ sentinel_version }}
+      Public URL: {{ sentinel_public_base_url }}
+      Push: {{ 'enabled' if (apns_key_b64 is defined and apns_key_b64 | length > 0) else 'DISABLED' }}
+      Recent logs:
+      {{ sentinel_logs.stdout }}

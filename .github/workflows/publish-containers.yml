@@ -14,10 +14,9 @@ name: Publish Containers
 # role resolves (weather_poller_version) and the GHCR convention of unprefixed
 # image tags.
 #
-# Only weather-poller is published from here now — Marshal (the former alert
-# engine) moved to trv-enterprises/trv-marshal, which publishes its own image
-# from plain v* tags since it has only one. The prefix scheme stays because it
-# is still correct for a monorepo and costs nothing with one service.
+# weather-poller and sentinel are published from here. Marshal (the former
+# alert engine) moved to trv-enterprises/trv-marshal, which publishes its own
+# image from plain v* tags since it has only one.
 #
 # Existing bare v0.2.0-rc.* and alert-engine/v* tags are left alone — valid
 # history, they just do not trigger this workflow.
@@ -29,6 +28,7 @@ on:
   push:
     tags:
       - 'weather-poller/v*'
+      - 'sentinel/v*'
   workflow_dispatch:
     inputs:
       service:
@@ -37,6 +37,7 @@ on:
         type: choice
         options:
           - weather-poller
+          - sentinel
       tag:
         description: 'Image tag (e.g. 0.2.1). Defaults to the branch name.'
         required: false
@@ -83,6 +84,7 @@ jobs:
           # fail loudly rather than silently building nothing.
           case "$service" in
             weather-poller) context="edge/weather-poller" ;;
+            sentinel)       context="edge/sentinel" ;;
             *)
               echo "::error::Unknown service '$service'."
               echo "Expected a tag like weather-poller/v0.1.0."
@@ -199,7 +201,10 @@ jobs:
             echo "Deploy from \`homelab-deploy\`:"
             echo
             echo '```'
-            echo "make deploy-weather"
+            case "${{ needs.resolve.outputs.service }}" in
+              sentinel) echo "make deploy-sentinel SENTINEL_VERSION=${{ needs.resolve.outputs.version }}" ;;
+              *)        echo "make deploy-weather" ;;
+            esac
             echo '```'
             echo
             echo "> \`deploy-weather\` takes no version argument — the role"

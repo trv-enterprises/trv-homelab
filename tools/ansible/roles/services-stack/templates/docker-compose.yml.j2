@@ -95,6 +95,32 @@ services:
       retries: 3
       start_period: 90s
 
+  sentinel:
+    image: ghcr.io/trv-enterprises/sentinel:{{ sentinel_version | default("latest") }}
+    restart: unless-stopped
+    env_file:
+      - sentinel.env
+    environment:
+      - TZ=America/Chicago
+    volumes:
+      - sentinel_data:/data
+      # Read-only view of Marshal's rules so sentinel can list rules and
+      # knows each rule's repeat window for its staleness sweep.
+      - ./rules.yaml:/etc/marshal/rules.yaml:ro
+    ports:
+      # Loopback only: tailscale serve fronts this with HTTPS for the phone.
+      - "127.0.0.1:{{ sentinel_http_port | default(8070) }}:8070"
+    depends_on:
+      - mosquitto
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8070/healthz >/dev/null 2>&1"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # Restarts containers that report unhealthy. Docker marks health status but
   # never acts on it, so without this a healthcheck is only a label on
   # `docker ps` -- which is exactly the gap that let a deaf marshal sit
@@ -125,6 +151,7 @@ services:
 
 volumes:
   mosquitto_data:
+  sentinel_data:
   mosquitto_log:
   zigbee2mqtt_data:
   homebridge_data:

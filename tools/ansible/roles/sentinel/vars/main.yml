@@ -1,0 +1,18 @@
+---
+# sentinel deployment configuration
+
+ghcr_registry: ghcr.io/trv-enterprises
+sentinel_image: "{{ ghcr_registry }}/sentinel"
+sentinel_version: latest
+
+# Deployment directory (shared services stack)
+services_deploy_dir: /opt/services
+
+# Defaults; override from the deployment inventory (host_vars/services.yml)
+mqtt_broker: "tcp://mosquitto:1883"
+sentinel_http_port: 8070
+frigate_url: "http://192.168.1.156:5000"
+sentinel_retention: "720h"
+# What the iOS app reaches. tailscale serve fronts 127.0.0.1:8070 with HTTPS.
+sentinel_public_base_url: "https://services.example.ts.net"
+sentinel_tailscale_serve: true

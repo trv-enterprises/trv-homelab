@@ -1,0 +1,14 @@
+---
+# sentinel Deployment Playbook
+#
+# Secrets (sentinel_api_token, apns_*) come from Ansible Vault.
+# Deploy:  ansible-playbook playbooks/sentinel-deploy.yml
+# Version: -e sentinel_version=0.1.0 (defaults to latest)
+
+- name: Deploy sentinel
+  hosts: services
+  become: false
+
+  roles:
+    - services-stack
+    - sentinel
