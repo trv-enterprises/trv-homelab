@@ -1,7 +1,12 @@
 package api
 
 import (
+	"compress/gzip"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -83,5 +88,60 @@ func TestSignPlaylist(t *testing.T) {
 	u, _ := url.Parse("http://h/v1/media/hls/event/e1/" + lines[2])
 	if !s.Verify(u.Path, u.Query()) {
 		t.Fatal("segment signature does not verify against its public path")
+	}
+}
+
+// Frigate's nginx gzips .m3u8 when the client asks for it, and AVPlayer
+// always asks. The proxy must get (or make) plain text before it appends
+// segment signatures, or it ships a corrupt gzip body.
+func TestHLSPlaylistThroughProxyIsNeverGzipped(t *testing.T) {
+	const playlist = "#EXTM3U\n#EXTINF:2.392,\nseg-1-v1-a1.ts\n#EXT-X-ENDLIST\n"
+	var sawEncoding string
+	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/vod/event/e1/index.m3u8" {
+			http.NotFound(w, r)
+			return
+		}
+		sawEncoding = r.Header.Get("Accept-Encoding")
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Vary", "Accept-Encoding")
+		if strings.Contains(sawEncoding, "gzip") {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			io.WriteString(gz, playlist)
+			gz.Close()
+			return
+		}
+		io.WriteString(w, playlist)
+	}))
+	defer frigate.Close()
+
+	s := NewSigner("http://h", "0123456789abcdef0123456789abcdef", time.Minute)
+	proxy := newFrigateProxy(frigate.URL, s)
+
+	for _, accept := range []string{"", "gzip, deflate", "identity"} {
+		req := httptest.NewRequest("GET", "/v1/media/hls/event/e1/index.m3u8", nil)
+		if accept != "" {
+			req.Header.Set("Accept-Encoding", accept)
+		}
+		rec := httptest.NewRecorder()
+		proxy.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("accept=%q: status %d", accept, rec.Code)
+		}
+		if ce := rec.Header().Get("Content-Encoding"); ce != "" {
+			t.Fatalf("accept=%q: response still encoded %q", accept, ce)
+		}
+		body := rec.Body.String()
+		if !strings.HasPrefix(body, "#EXTM3U") {
+			t.Fatalf("accept=%q: body is not a plaintext playlist (upstream saw Accept-Encoding=%q):\n%q", accept, sawEncoding, body)
+		}
+		lines := strings.Split(strings.TrimSpace(body), "\n")
+		if len(lines) != 4 || !strings.HasPrefix(lines[2], "seg-1-v1-a1.ts?exp=") || !strings.Contains(lines[2], "&sig=") {
+			t.Fatalf("accept=%q: segment not signed:\n%s", accept, body)
+		}
+		if got := rec.Header().Get("Content-Length"); got != strconv.Itoa(len(body)) {
+			t.Fatalf("accept=%q: Content-Length %q for %d bytes", accept, got, len(body))
+		}
 	}
 }

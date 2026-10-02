@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -105,6 +106,13 @@ func newFrigateProxy(frigateURL string, signer *Signer) http.Handler {
 			pr.Out.Header.Del("Authorization")
 			pr.Out.Header.Set("X-Sentinel-Public-Path", pr.In.URL.Path)
 			pr.Out.Host = target.Host
+			// Playlists are rewritten below, so they must arrive as text.
+			// AVPlayer (and tailscale serve in front of us) advertise gzip
+			// and Frigate's nginx honours it for .m3u8; signing the bytes
+			// of a gzip stream produces a body nothing can decode.
+			if strings.HasSuffix(pr.Out.URL.Path, ".m3u8") {
+				pr.Out.Header.Set("Accept-Encoding", "identity")
+			}
 		},
 		FlushInterval: -1, // stream video bodies as they arrive
 		ModifyResponse: func(resp *http.Response) error {
@@ -118,11 +126,24 @@ func newFrigateProxy(frigateURL string, signer *Signer) http.Handler {
 			// URL and drops the query string, so each segment line gets its
 			// own signed query appended here.
 			if strings.HasSuffix(resp.Request.URL.Path, ".m3u8") && resp.StatusCode == http.StatusOK {
-				body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+				var rd io.Reader = resp.Body
+				// Belt and braces: if something upstream compressed it
+				// anyway, inflate before rewriting and serve it plain.
+				if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+					gz, err := gzip.NewReader(resp.Body)
+					if err != nil {
+						resp.Body.Close()
+						return err
+					}
+					defer gz.Close()
+					rd = gz
+				}
+				body, err := io.ReadAll(io.LimitReader(rd, 4<<20))
 				resp.Body.Close()
 				if err != nil {
 					return err
 				}
+				resp.Header.Del("Content-Encoding")
 				// The public path is what the client requested; the proxy
 				// request path was already rewritten, so recover it from
 				// the original request header we stashed.
