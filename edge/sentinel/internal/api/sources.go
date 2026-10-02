@@ -66,6 +66,12 @@ func (s *Server) sources(r *http.Request) ([]source, error) {
 		seen[c] = true
 		out = append(out, source{ID: "frigate_" + c, Kind: model.KindCamera, Name: humanize(c), Camera: c})
 	}
+	// dashboard (ts-store) rules that have fired: id dashboard_<slug>, name = rule
+	if names, err := s.store.RecentSourceNames(ctx, model.KindDashboard, 100); err == nil {
+		for _, n := range names {
+			out = append(out, source{ID: n[0], Kind: model.KindDashboard, Name: n[1], Rule: n[1]})
+		}
+	}
 	// cameras that alerted but are not (or no longer) in Frigate's config
 	if recent, err := s.store.List(ctx, store.ListFilter{Kind: model.KindCamera, Limit: 200}); err == nil {
 		for _, a := range recent {
@@ -85,9 +91,10 @@ func (s *Server) sources(r *http.Request) ([]source, error) {
 			out[i].Policy = store.DefaultPolicy()
 		}
 	}
+	rank := map[string]int{model.KindSensor: 0, model.KindDashboard: 1, model.KindCamera: 2}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Kind != out[j].Kind {
-			return out[i].Kind == model.KindSensor
+			return rank[out[i].Kind] < rank[out[j].Kind]
 		}
 		return out[i].Name < out[j].Name
 	})

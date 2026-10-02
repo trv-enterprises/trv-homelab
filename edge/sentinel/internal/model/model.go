@@ -6,8 +6,9 @@ import "time"
 
 // Alert kinds.
 const (
-	KindSensor = "sensor" // Marshal rule alert (sensors/alerts)
-	KindCamera = "camera" // Frigate review (frigate/reviews)
+	KindSensor    = "sensor"    // Marshal rule alert (sensors/alerts)
+	KindCamera    = "camera"    // Frigate review (frigate/reviews)
+	KindDashboard = "dashboard" // ts-store alert relayed by the dashboard (SSE)
 )
 
 // Alert statuses.
@@ -43,8 +44,20 @@ type Alert struct {
 	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
 	RepeatCount int        `json:"repeat_count"`
 	Frigate     *Frigate   `json:"frigate,omitempty"`
+	Dashboard   *Dashboard `json:"dashboard,omitempty"`
+	Link        string     `json:"link,omitempty"` // absolute URL to open outside the app (dashboard page)
 	Media       *Media     `json:"media,omitempty"`
 	Raw         string     `json:"-"`
+}
+
+// Dashboard carries what the dashboard knew about a ts-store alert.
+type Dashboard struct {
+	AlertID       string            `json:"alert_id"` // the dashboard's own id (Mongo)
+	RuleName      string            `json:"rule_name"`
+	Store         string            `json:"store,omitempty"`
+	Subtitle      string            `json:"subtitle,omitempty"`
+	DashboardID   string            `json:"dashboard_id,omitempty"`
+	DashboardVars map[string]string `json:"dashboard_vars,omitempty"`
 }
 
 // Frigate carries the review fields the app needs to find media.

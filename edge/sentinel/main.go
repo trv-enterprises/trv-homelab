@@ -17,6 +17,7 @@ import (
 
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/api"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/config"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/dashboard"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
@@ -74,9 +75,21 @@ func main() {
 
 	engine := ingest.New(cfg.MQTTBroker, cfg.MQTTClientID, st, hub, rulesReader)
 
+	var dash *dashboard.Runner
+	if cfg.DashboardEnabled() {
+		dash = dashboard.NewRunner(dashboard.NewClient(dashboard.Config{
+			BaseURL: cfg.DashboardURL, APIKey: cfg.DashboardAPIKey, PublicURL: cfg.DashboardPublicURL,
+			LinkUserID: cfg.DashboardLinkUserID, MarkSeen: cfg.DashboardMarkSeen,
+		}), st, hub)
+		go dash.Run(ctx)
+		slog.Info("dashboard feed enabled", "url", cfg.DashboardURL, "public", cfg.DashboardPublicURL)
+	} else {
+		slog.Warn("dashboard feed disabled: DASHBOARD_URL/DASHBOARD_API_KEY unset")
+	}
+
 	srv := api.New(api.Deps{
 		Token: cfg.APIToken, Store: st, Rules: rulesReader, Pusher: pusher, Engine: engine,
-		Signer: signer, Hub: hub, Decider: decider, Cameras: cameras, FrigateURL: cfg.FrigateURL,
+		Signer: signer, Hub: hub, Decider: decider, Cameras: cameras, Dashboard: dash, FrigateURL: cfg.FrigateURL,
 	})
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

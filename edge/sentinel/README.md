@@ -121,6 +121,39 @@ regardless; policy only decides the push.
 `POST /v1/rules/{name}/mute` and `DELETE` remain as aliases for sources that
 are Marshal rules; new clients should use `/v1/sources`.
 
+## Dashboard alerts (0.4.0)
+
+ts-store alert rules post to the dashboard, which stores them and shows them
+in its bell with the dashboard they relate to. sentinel subscribes to the
+dashboard's own alert feed (`GET /api/events/stream`, SSE) with a view-only
+API key and mirrors each alert as `kind: dashboard`. No dashboard change is
+needed; the dashboard stays the system of record.
+
+- **Identity.** One sentinel alert per dashboard alert id. Source id for mute
+  and policy is `dashboard_<slug>` of the rule name (lowercase, runs of
+  non-alphanumerics to `-`), and such a source appears in `/v1/sources`
+  once its rule has fired at least once.
+- **Link.** When the alert carries a `dashboard_id`, the alert JSON has
+  `link`: `<DASHBOARD_PUBLIC_URL>/view/dashboards/<id>?var_<name>=<value>…&user_id=<guid>`,
+  the same URL the bell's "open dashboard" builds, plus the user id so a
+  fresh Safari is signed in (prod uses legacy GUID auth). `dashboard`
+  carries `alert_id`, `rule_name`, `store`, `subtitle`, `dashboard_id`,
+  `dashboard_vars`.
+- **Lifecycle.** Created `active` with `started_at = fired_at`. Resolved when
+  dismissed in the dashboard (reconciled every 5 minutes against the unseen
+  list) or resolved in the app, which also marks it seen in the dashboard
+  when `DASHBOARD_MARK_SEEN=true` (seen is global there).
+- **Gaps.** The SSE feed has no replay, so sentinel backfills from
+  `GET /api/alerts` on start and after every reconnect; an alert that fired
+  while sentinel was down still arrives once. Severity maps
+  `error→critical`, `warning→warning`, `info→info` (the dashboard sends
+  `warning` for everything today).
+- **Push.** Policy and quiet hours apply like any source (`repeats` is moot:
+  every dashboard alert is a new id). The payload carries `link` and sets
+  `aps.category = "dashboard"` so the app can offer an "Open Dashboard"
+  notification action.
+- **Health.** `/healthz` reports `dashboard: {enabled, connected, last_event, last_error}`.
+
 ## Configuration (env)
 
 | Var | Default | |
@@ -135,6 +168,10 @@ are Marshal rules; new clients should use `/v1/sources`.
 | `FRIGATE_URL` | `http://192.168.1.156:5000` | |
 | `RULES_PATH` | `/etc/marshal/rules.yaml` | |
 | `APNS_KEY_B64`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` | unset | all four required for push; otherwise the server runs with push disabled |
+| `DASHBOARD_URL`, `DASHBOARD_API_KEY` | unset | both required for the dashboard feed; otherwise it is off |
+| `DASHBOARD_PUBLIC_URL` | unset | base of the deep links the phone opens |
+| `DASHBOARD_LINK_USER_ID` | unset | appended to links as `user_id` |
+| `DASHBOARD_MARK_SEEN` | `true` | app resolve → dashboard seen |
 
 ## Deploy
 

@@ -154,6 +154,11 @@ func (p *Pusher) build(a model.Alert) *payload.Payload {
 	if a.Severity == model.SeverityCritical || a.Kind == model.KindCamera {
 		pl = pl.InterruptionLevel(payload.InterruptionLevelTimeSensitive)
 	}
+	if a.Link != "" {
+		// The app registers a "dashboard" category with an "Open Dashboard"
+		// action; the link is what that action opens.
+		pl = pl.Category("dashboard").Custom("link", a.Link)
+	}
 	if p.links != nil {
 		if u := p.links.ThumbURL(a); u != "" {
 			pl = pl.Custom("thumb_url", u)

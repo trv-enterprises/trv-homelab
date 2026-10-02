@@ -29,21 +29,33 @@ type Config struct {
 	APNSKeyID    string
 	APNSTeamID   string
 	APNSBundleID string
+
+	// Dashboard alert feed (optional). URL+key enable it.
+	DashboardURL        string // API base, e.g. http://192.168.1.44:3001
+	DashboardAPIKey     string
+	DashboardPublicURL  string // what Safari opens, e.g. http://dashboard.<tailnet>.ts.net
+	DashboardLinkUserID string // appended as ?user_id= so the browser is signed in
+	DashboardMarkSeen   bool   // resolving in the app marks the alert seen in the dashboard
 }
 
 func Load() (Config, error) {
 	c := Config{
-		MQTTBroker:    env("MQTT_BROKER", "tcp://mosquitto:1883"),
-		MQTTClientID:  env("MQTT_CLIENT_ID", "sentinel"),
-		HTTPAddr:      env("HTTP_ADDR", ":8070"),
-		PublicBaseURL: strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8070"), "/"),
-		APIToken:      os.Getenv("API_TOKEN"),
-		DBPath:        env("DB_PATH", "/data/sentinel.db"),
-		FrigateURL:    strings.TrimRight(env("FRIGATE_URL", "http://192.168.1.156:5000"), "/"),
-		RulesPath:     env("RULES_PATH", "/etc/marshal/rules.yaml"),
-		APNSKeyID:     os.Getenv("APNS_KEY_ID"),
-		APNSTeamID:    os.Getenv("APNS_TEAM_ID"),
-		APNSBundleID:  os.Getenv("APNS_BUNDLE_ID"),
+		MQTTBroker:          env("MQTT_BROKER", "tcp://mosquitto:1883"),
+		MQTTClientID:        env("MQTT_CLIENT_ID", "sentinel"),
+		HTTPAddr:            env("HTTP_ADDR", ":8070"),
+		PublicBaseURL:       strings.TrimRight(env("PUBLIC_BASE_URL", "http://localhost:8070"), "/"),
+		APIToken:            os.Getenv("API_TOKEN"),
+		DBPath:              env("DB_PATH", "/data/sentinel.db"),
+		FrigateURL:          strings.TrimRight(env("FRIGATE_URL", "http://192.168.1.156:5000"), "/"),
+		RulesPath:           env("RULES_PATH", "/etc/marshal/rules.yaml"),
+		APNSKeyID:           os.Getenv("APNS_KEY_ID"),
+		DashboardURL:        strings.TrimRight(os.Getenv("DASHBOARD_URL"), "/"),
+		DashboardAPIKey:     os.Getenv("DASHBOARD_API_KEY"),
+		DashboardPublicURL:  strings.TrimRight(os.Getenv("DASHBOARD_PUBLIC_URL"), "/"),
+		DashboardLinkUserID: os.Getenv("DASHBOARD_LINK_USER_ID"),
+		DashboardMarkSeen:   env("DASHBOARD_MARK_SEEN", "true") == "true",
+		APNSTeamID:          os.Getenv("APNS_TEAM_ID"),
+		APNSBundleID:        os.Getenv("APNS_BUNDLE_ID"),
 	}
 
 	if c.APIToken == "" {
@@ -70,6 +82,9 @@ func Load() (Config, error) {
 	}
 	return c, nil
 }
+
+// DashboardEnabled reports whether the dashboard feed is configured.
+func (c Config) DashboardEnabled() bool { return c.DashboardURL != "" && c.DashboardAPIKey != "" }
 
 // PushEnabled reports whether every APNs setting is present.
 func (c Config) PushEnabled() bool {

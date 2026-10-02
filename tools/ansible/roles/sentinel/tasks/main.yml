@@ -85,5 +85,6 @@
       Image: {{ sentinel_image }}:{{ sentinel_version }}
       Public URL: {{ sentinel_public_base_url }}
       Push: {{ 'enabled' if (apns_key_b64 is defined and apns_key_b64 | length > 0) else 'DISABLED' }}
+      Dashboard feed: {{ 'enabled (' ~ dashboard_url ~ ')' if (sentinel_dashboard_api_key is defined and sentinel_dashboard_api_key | length > 0) else 'disabled' }}
       Recent logs:
       {{ sentinel_logs.stdout }}

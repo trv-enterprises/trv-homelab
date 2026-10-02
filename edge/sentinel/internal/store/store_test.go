@@ -191,3 +191,42 @@ func TestMutes(t *testing.T) {
 		t.Fatal("cleared mute still active")
 	}
 }
+
+func TestDashboardUpsertAndMigration(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	m := DashboardMsg{ExternalID: "m1", SourceID: "dashboard_high-temp", RuleName: "High Temp", Store: "system-stats",
+		Title: "High Temp on Proxmox", Subtitle: "cpu > 80", Severity: "warning", DashboardID: "d1",
+		DashboardVars: map[string]string{"host": "a"}, Link: "http://x/view/dashboards/d1?var_host=a", FiredAt: time.Now().Add(-time.Minute)}
+	a, created, err := s.UpsertDashboard(ctx, m)
+	if err != nil || !created || a.Kind != model.KindDashboard || a.Link == "" || a.Dashboard == nil || a.Dashboard.DashboardVars["host"] != "a" || a.Rule != "dashboard_high-temp" {
+		t.Fatalf("insert: %+v created=%v err=%v", a, created, err)
+	}
+	b, created, err := s.UpsertDashboard(ctx, m)
+	if err != nil || created || b.ID != a.ID {
+		t.Fatalf("dup: created=%v err=%v", created, err)
+	}
+	ids, _ := s.ActiveExternalIDs(ctx, model.KindDashboard)
+	if ids["m1"] != a.ID {
+		t.Fatalf("active ids %+v", ids)
+	}
+	names, _ := s.RecentSourceNames(ctx, model.KindDashboard, 10)
+	if len(names) != 1 || names[0][0] != "dashboard_high-temp" || names[0][1] != "High Temp" {
+		t.Fatalf("names %+v", names)
+	}
+	// no subtitle -> body falls back to rule on store
+	c, _, _ := s.UpsertDashboard(ctx, DashboardMsg{ExternalID: "m2", SourceID: "dashboard_x", RuleName: "X", Store: "st", Title: "X", Severity: "info"})
+	if c.Body != "X on st" {
+		t.Fatalf("body fallback %q", c.Body)
+	}
+	// reopening the same file runs migrate() on an already-migrated schema
+	path := filepath.Join(t.TempDir(), "mig.db")
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2.Close()
+	if _, err := Open(path); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+}

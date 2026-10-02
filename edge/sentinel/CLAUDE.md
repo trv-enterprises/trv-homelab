@@ -55,6 +55,15 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   the clean fix is for Marshal to ignore empty payloads silently (trv-marshal
   change, pending).
 - **Commit, then push, then SSE.** A notification tap must never 404.
+- **Dashboard alerts are pulled from the dashboard, not re-sunk from ts-store.**
+  A ts-store rule has exactly one sink; pointing rules at MQTT would take them
+  away from the bell and lose the dashboard link metadata. The dashboard's
+  SSE feed already carries `dashboard_id`/`dashboard_vars`, so sentinel is a
+  second subscriber with a view-only key. The feed has no replay and the
+  only list is "unseen or pinned", hence backfill on (re)connect and a
+  5-minute reconcile that resolves what was dismissed in the bell. The
+  dashboard alert id lives in the `review_id` column (unique external id
+  for every kind); `device` holds the human rule name, `rule` the source id.
 
 ## Local run
 

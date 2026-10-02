@@ -40,7 +40,49 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// migrate adds columns that CREATE TABLE IF NOT EXISTS cannot add to an
+// existing file. Each entry is idempotent: skipped when the column exists.
+func migrate(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(alerts)`)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		have[name] = true
+	}
+	rows.Close()
+	adds := []struct{ name, ddl string }{
+		{"link", `ALTER TABLE alerts ADD COLUMN link TEXT NOT NULL DEFAULT ''`},
+		{"dashboard_id", `ALTER TABLE alerts ADD COLUMN dashboard_id TEXT NOT NULL DEFAULT ''`},
+		{"dashboard_vars", `ALTER TABLE alerts ADD COLUMN dashboard_vars TEXT NOT NULL DEFAULT '{}'`},
+		{"store_name", `ALTER TABLE alerts ADD COLUMN store_name TEXT NOT NULL DEFAULT ''`},
+		{"subtitle", `ALTER TABLE alerts ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, a := range adds {
+		if have[a.name] {
+			continue
+		}
+		if _, err := db.Exec(a.ddl); err != nil {
+			return fmt.Errorf("add column %s: %w", a.name, err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -49,7 +91,8 @@ func (s *Store) Close() error { return s.db.Close() }
 
 const alertCols = `id, kind, status, severity, title, body, rule, device, camera,
 	review_id, event_ids, objects, thumb_path, start_ts, end_ts,
-	started_at, updated_at, resolved_at, repeat_count, raw`
+	started_at, updated_at, resolved_at, repeat_count, raw,
+	link, dashboard_id, dashboard_vars, store_name, subtitle`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -58,11 +101,19 @@ func scanAlert(row scanner) (model.Alert, error) {
 	var reviewID, resolvedAt sql.NullString
 	var eventIDs, objects, thumbPath, startedAt, updatedAt string
 	var startTS, endTS float64
+	var link, dashboardID, dashboardVars, storeName, subtitle string
 	err := row.Scan(&a.ID, &a.Kind, &a.Status, &a.Severity, &a.Title, &a.Body, &a.Rule, &a.Device, &a.Camera,
 		&reviewID, &eventIDs, &objects, &thumbPath, &startTS, &endTS,
-		&startedAt, &updatedAt, &resolvedAt, &a.RepeatCount, &a.Raw)
+		&startedAt, &updatedAt, &resolvedAt, &a.RepeatCount, &a.Raw,
+		&link, &dashboardID, &dashboardVars, &storeName, &subtitle)
 	if err != nil {
 		return a, err
+	}
+	a.Link = link
+	if a.Kind == model.KindDashboard {
+		d := &model.Dashboard{AlertID: reviewID.String, RuleName: a.Device, Store: storeName, Subtitle: subtitle, DashboardID: dashboardID}
+		_ = json.Unmarshal([]byte(dashboardVars), &d.DashboardVars)
+		a.Dashboard = d
 	}
 	a.StartedAt = parseTime(startedAt)
 	a.UpdatedAt = parseTime(updatedAt)
@@ -610,4 +661,106 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
+}
+
+// ---- dashboard alerts (0.4.0) ---------------------------------------------
+
+// DashboardMsg is a normalized dashboard alert (from SSE or the unseen list).
+type DashboardMsg struct {
+	ExternalID    string // the dashboard's alert id
+	SourceID      string // sentinel source id: dashboard_<slug>
+	RuleName      string
+	Store         string
+	Title         string
+	Subtitle      string
+	Severity      string // already mapped to sentinel's scale
+	DashboardID   string
+	DashboardVars map[string]string
+	Link          string
+	FiredAt       time.Time
+	Raw           string
+}
+
+// UpsertDashboard inserts an active alert for a new dashboard alert id, or
+// refreshes updated_at/raw for one already known (status untouched).
+func (s *Store) UpsertDashboard(ctx context.Context, m DashboardMsg) (model.Alert, bool, error) {
+	now := fmtTime(time.Now())
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM alerts WHERE review_id = ?`, m.ExternalID).Scan(&id)
+	switch {
+	case err == nil:
+		if _, err := s.db.ExecContext(ctx, `UPDATE alerts SET updated_at = ?, raw = ?, link = CASE WHEN ? != '' THEN ? ELSE link END WHERE id = ?`,
+			now, m.Raw, m.Link, m.Link, id); err != nil {
+			return model.Alert{}, false, err
+		}
+		a, err := s.Get(ctx, id)
+		return a, false, err
+	case errors.Is(err, sql.ErrNoRows):
+		id = uuid.NewString()
+		vars, _ := json.Marshal(m.DashboardVars)
+		if m.DashboardVars == nil {
+			vars = []byte("{}")
+		}
+		started := now
+		if !m.FiredAt.IsZero() {
+			started = fmtTime(m.FiredAt)
+		}
+		body := m.Subtitle
+		if body == "" {
+			body = m.RuleName
+			if m.Store != "" {
+				body += " on " + m.Store
+			}
+		}
+		_, err = s.db.ExecContext(ctx, `INSERT INTO alerts
+			(id, kind, status, severity, title, body, rule, device, review_id, started_at, updated_at, raw,
+			 link, dashboard_id, dashboard_vars, store_name, subtitle)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, model.KindDashboard, model.StatusActive, m.Severity, m.Title, body, m.SourceID, m.RuleName, m.ExternalID,
+			started, now, m.Raw, m.Link, m.DashboardID, string(vars), m.Store, m.Subtitle)
+		if err != nil {
+			return model.Alert{}, false, err
+		}
+		a, err := s.Get(ctx, id)
+		return a, true, err
+	default:
+		return model.Alert{}, false, err
+	}
+}
+
+// ActiveExternalIDs maps external id -> alert id for active alerts of a kind.
+func (s *Store) ActiveExternalIDs(ctx context.Context, kind string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT review_id, id FROM alerts WHERE kind = ? AND status = ? AND review_id IS NOT NULL`, kind, model.StatusActive)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var ext, id string
+		if err := rows.Scan(&ext, &id); err != nil {
+			return nil, err
+		}
+		out[ext] = id
+	}
+	return out, rows.Err()
+}
+
+// RecentSourceNames returns distinct (rule, device) pairs for a kind, newest
+// first, used to list dashboard sources that have fired.
+func (s *Store) RecentSourceNames(ctx context.Context, kind string, limit int) ([][2]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT rule, device, MAX(updated_at) AS u FROM alerts WHERE kind = ? GROUP BY rule, device ORDER BY u DESC LIMIT ?`, kind, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out [][2]string
+	for rows.Next() {
+		var rule, device, u string
+		if err := rows.Scan(&rule, &device, &u); err != nil {
+			return nil, err
+		}
+		out = append(out, [2]string{rule, device})
+	}
+	return out, rows.Err()
 }

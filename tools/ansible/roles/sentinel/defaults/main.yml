@@ -16,3 +16,11 @@ sentinel_retention: "720h"
 # What the iOS app reaches. tailscale serve fronts 127.0.0.1:8070 with HTTPS.
 sentinel_public_base_url: "https://services.example.ts.net"
 sentinel_tailscale_serve: true
+
+# Dashboard alert feed (optional; enabled when sentinel_dashboard_api_key is
+# set in the vault). dashboard_url is the API base as reached from the
+# services LXC; dashboard_public_url is what Safari on the phone opens.
+dashboard_url: "http://dashboard:3001"
+dashboard_public_url: "https://dashboard.example.ts.net"
+dashboard_link_user_id: ""
+dashboard_mark_seen: true

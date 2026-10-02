@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/dashboard"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
@@ -34,6 +35,7 @@ type Server struct {
 	hub     *Hub
 	decider *policy.Decider
 	cameras *frigate.Cameras
+	dash    *dashboard.Runner // nil when the feed is not configured
 	proxy   http.Handler
 	mux     *http.ServeMux
 	started time.Time
@@ -49,12 +51,13 @@ type Deps struct {
 	Hub        *Hub
 	Decider    *policy.Decider
 	Cameras    *frigate.Cameras
+	Dashboard  *dashboard.Runner
 	FrigateURL string
 }
 
 func New(d Deps) *Server {
 	s := &Server{token: d.Token, store: d.Store, rules: d.Rules, pusher: d.Pusher, engine: d.Engine,
-		signer: d.Signer, hub: d.Hub, decider: d.Decider, cameras: d.Cameras, mux: http.NewServeMux(), started: time.Now()}
+		signer: d.Signer, hub: d.Hub, decider: d.Decider, cameras: d.Cameras, dash: d.Dashboard, mux: http.NewServeMux(), started: time.Now()}
 	s.proxy = newFrigateProxy(d.FrigateURL, d.Signer)
 
 	s.mux.HandleFunc("GET /healthz", s.health)
@@ -149,6 +152,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		"mqtt":        st,
 		"push":        s.pusher.Enabled(),
 		"sse_clients": s.hub.Clients(),
+		"dashboard":   s.dash.Status(),
 	}
 	code := http.StatusOK
 	if !s.engine.Healthy() {
@@ -220,6 +224,17 @@ func (s *Server) resolveAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.hub.Broadcast(model.Event{Type: "updated", Alert: a})
+	// Dashboard alerts: dismiss in the dashboard too, so the bell and the
+	// phone agree. Best effort; the app's resolve already succeeded.
+	if a.Kind == model.KindDashboard && a.Dashboard != nil && s.dash.MarkSeenEnabled() {
+		go func(id string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			if err := s.dash.MarkSeen(ctx, id); err != nil {
+				slog.Warn("dashboard: mark seen failed", "alert", id, "error", err)
+			}
+		}(a.Dashboard.AlertID)
+	}
 	writeJSON(w, http.StatusOK, s.decorate(a))
 }
 

@@ -21,7 +21,13 @@ CREATE TABLE IF NOT EXISTS alerts (
     updated_at   TEXT NOT NULL,
     resolved_at  TEXT,
     repeat_count INTEGER NOT NULL DEFAULT 0,
-    raw          TEXT NOT NULL DEFAULT ''
+    raw          TEXT NOT NULL DEFAULT '',
+    -- 0.4.0 (dashboard alerts); added by migration on older files
+    link           TEXT NOT NULL DEFAULT '',
+    dashboard_id   TEXT NOT NULL DEFAULT '',
+    dashboard_vars TEXT NOT NULL DEFAULT '{}',
+    store_name     TEXT NOT NULL DEFAULT '',
+    subtitle       TEXT NOT NULL DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS alerts_review_id ON alerts(review_id) WHERE review_id IS NOT NULL;
