@@ -62,6 +62,9 @@ func New(d Deps) *Server {
 	s.mux.HandleFunc("DELETE /v1/devices/{token}", s.deleteDevice)
 	s.mux.HandleFunc("POST /v1/push/test", s.testPush)
 	s.mux.HandleFunc("GET /v1/rules", s.listRules)
+	s.mux.HandleFunc("POST /v1/rules/{name}/mute", s.muteRule)
+	s.mux.HandleFunc("DELETE /v1/rules/{name}/mute", s.unmuteRule)
+	s.mux.HandleFunc("POST /v1/rules/{name}/enable", s.enableRule)
 	return s
 }
 
@@ -272,17 +275,6 @@ func (s *Server) testPush(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	writeJSON(w, http.StatusOK, map[string]any{"results": s.pusher.SendTest(ctx, strings.ToLower(body.Token), body.Env)})
-}
-
-// ---- rules ------------------------------------------------------------------
-
-func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {
-	rs, err := s.rules.Rules()
-	resp := map[string]any{"rules": rs}
-	if err != nil {
-		resp["warning"] = err.Error()
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 // ---- helpers ----------------------------------------------------------------

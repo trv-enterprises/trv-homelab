@@ -478,3 +478,60 @@ func cameraBody(objects, zones []string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// SetMute mutes a rule until `until` (nil = indefinitely).
+func (s *Store) SetMute(ctx context.Context, rule string, until *time.Time) error {
+	var u any
+	if until != nil {
+		u = fmtTime(*until)
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO mutes (rule, until) VALUES (?, ?)
+		ON CONFLICT(rule) DO UPDATE SET until = excluded.until`, rule, u)
+	return err
+}
+
+// ClearMute removes a rule's mute.
+func (s *Store) ClearMute(ctx context.Context, rule string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM mutes WHERE rule = ?`, rule)
+	return err
+}
+
+// Mute is one row of the mutes table.
+type Mute struct {
+	Rule  string
+	Until *time.Time // nil = indefinite
+}
+
+// Mutes returns every mute that is still in force at now. Expired rows are
+// deleted on the way through.
+func (s *Store) Mutes(ctx context.Context, now time.Time) (map[string]Mute, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT rule, until FROM mutes`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]Mute{}
+	var expired []string
+	for rows.Next() {
+		var rule string
+		var until sql.NullString
+		if err := rows.Scan(&rule, &until); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		m := Mute{Rule: rule}
+		if until.Valid {
+			t := parseTime(until.String)
+			if !t.After(now) {
+				expired = append(expired, rule)
+				continue
+			}
+			m.Until = &t
+		}
+		out[rule] = m
+	}
+	rows.Close()
+	for _, r := range expired {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM mutes WHERE rule = ?`, r)
+	}
+	return out, nil
+}

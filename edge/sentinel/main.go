@@ -67,7 +67,7 @@ func main() {
 		pusher.Notify(pctx, ev)
 	})
 
-	engine := ingest.New(cfg.MQTTBroker, cfg.MQTTClientID, st, hub)
+	engine := ingest.New(cfg.MQTTBroker, cfg.MQTTClientID, st, hub, rulesReader)
 
 	srv := api.New(api.Deps{
 		Token: cfg.APIToken, Store: st, Rules: rulesReader, Pusher: pusher, Engine: engine,

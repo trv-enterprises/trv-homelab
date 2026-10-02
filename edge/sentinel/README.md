@@ -39,7 +39,10 @@ All routes need `Authorization: Bearer <API_TOKEN>` except `/healthz`.
 | `POST /v1/devices` `{token, env, name, app_version}` | register an APNs device token (upsert) |
 | `GET /v1/devices`, `DELETE /v1/devices/{token}` | |
 | `POST /v1/push/test` `{token?, env?}` | send a test push |
-| `GET /v1/rules` | Marshal rules, read from the mounted `rules.yaml` |
+| `GET /v1/rules` | Marshal rules from the mounted `rules.yaml`, plus `muted`/`muted_until` (sentinel) and `owner` (Marshal's retained `state_topic`: automation/override/parked) |
+| `POST /v1/rules/{name}/mute` `{minutes: n\|null}` | suppress pushes for a rule (null = until unmuted); the rule still fires and is listed |
+| `DELETE /v1/rules/{name}/mute` | lift the mute |
+| `POST /v1/rules/{name}/enable` `{enabled: bool}` | publish to the rule's Marshal `enable_topic` (parks/resumes every rule sharing that topic); 409 for alert-only rules, which Marshal cannot park |
 | `GET /healthz` | MQTT liveness; 503 when the heartbeat loopback is stale |
 
 Media links are signed with `hmac-sha256(API_TOKEN, path|exp)` and expire

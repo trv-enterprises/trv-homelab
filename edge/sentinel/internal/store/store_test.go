@@ -158,3 +158,36 @@ func TestDevices(t *testing.T) {
 		t.Fatal("delete failed")
 	}
 }
+
+func TestMutes(t *testing.T) {
+	s := open(t)
+	ctx := context.Background()
+	now := time.Now()
+	past := now.Add(-time.Minute)
+	future := now.Add(time.Hour)
+	if err := s.SetMute(ctx, "forever", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMute(ctx, "soon", &future); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetMute(ctx, "gone", &past); err != nil {
+		t.Fatal(err)
+	}
+	m, err := s.Mutes(ctx, now)
+	if err != nil || len(m) != 2 || m["forever"].Until != nil || m["soon"].Until == nil {
+		t.Fatalf("mutes %+v err=%v", m, err)
+	}
+	if muted, _ := s.IsMuted(ctx, "gone", now); muted {
+		t.Fatal("expired mute still active")
+	}
+	if muted, _ := s.IsMuted(ctx, "forever", now); !muted {
+		t.Fatal("indefinite mute not active")
+	}
+	if err := s.ClearMute(ctx, "forever"); err != nil {
+		t.Fatal(err)
+	}
+	if muted, _ := s.IsMuted(ctx, "forever", now); muted {
+		t.Fatal("cleared mute still active")
+	}
+}

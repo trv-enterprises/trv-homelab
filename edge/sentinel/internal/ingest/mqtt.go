@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,11 +52,21 @@ type Sink interface {
 	OnEvent(ev model.Event)
 }
 
+// StateTopics supplies the Marshal state_topic list to subscribe to (from
+// rules.yaml). Retained values are kept so /v1/rules can report the owner.
+type StateTopics interface {
+	StateTopics() []string
+}
+
 type Engine struct {
 	broker   string
 	clientID string
 	store    *store.Store
 	sink     Sink
+	states   StateTopics
+
+	stateMu sync.RWMutex
+	state   map[string]string // state_topic -> last retained payload
 
 	inbox chan inbound
 
@@ -71,8 +82,17 @@ type Engine struct {
 	}
 }
 
-func New(broker, clientID string, st *store.Store, sink Sink) *Engine {
-	return &Engine{broker: broker, clientID: clientID, store: st, sink: sink, inbox: make(chan inbound, inboxSize)}
+func New(broker, clientID string, st *store.Store, sink Sink, states StateTopics) *Engine {
+	return &Engine{broker: broker, clientID: clientID, store: st, sink: sink, states: states,
+		state: map[string]string{}, inbox: make(chan inbound, inboxSize)}
+}
+
+// Owner returns the last retained payload seen on a Marshal state_topic
+// ("automation" | "override" | "parked"), or "" if none.
+func (e *Engine) Owner(stateTopic string) string {
+	e.stateMu.RLock()
+	defer e.stateMu.RUnlock()
+	return e.state[stateTopic]
 }
 
 // Run connects and blocks until ctx is done. It owns the dispatcher, the
@@ -146,7 +166,44 @@ func (e *Engine) subscribe(c mqtt.Client) error {
 	if !tok.WaitTimeout(tokenWait) {
 		return fmt.Errorf("subscribe timeout")
 	}
+	if err := tok.Error(); err != nil {
+		return err
+	}
+	return e.subscribeStates(c)
+}
+
+// subscribeStates subscribes to every Marshal state_topic in rules.yaml.
+// Retained messages arrive immediately, so the owner map is warm right
+// after connect. Called on connect and periodically from the heartbeat so
+// rules added later are picked up without a restart.
+func (e *Engine) subscribeStates(c mqtt.Client) error {
+	if e.states == nil {
+		return nil
+	}
+	topics := e.states.StateTopics()
+	if len(topics) == 0 {
+		return nil
+	}
+	filters := map[string]byte{}
+	for _, t := range topics {
+		filters[t] = 0
+	}
+	tok := c.SubscribeMultiple(filters, e.onState)
+	if !tok.WaitTimeout(tokenWait) {
+		return fmt.Errorf("subscribe states timeout")
+	}
 	return tok.Error()
+}
+
+func (e *Engine) onState(_ mqtt.Client, m mqtt.Message) {
+	v := strings.TrimSpace(string(m.Payload()))
+	e.stateMu.Lock()
+	if v == "" {
+		delete(e.state, m.Topic())
+	} else {
+		e.state[m.Topic()] = v
+	}
+	e.stateMu.Unlock()
 }
 
 // onMessage runs on paho's router goroutine: never block here. Copy the
@@ -281,6 +338,11 @@ func (e *Engine) heartbeat(ctx context.Context) {
 			if c != nil && c.IsConnectionOpen() {
 				tok := c.Publish(TopicHeartbeat, 0, false, now.UTC().Format(time.RFC3339))
 				tok.WaitTimeout(tokenWait)
+				// Cheap and idempotent: picks up state_topics for rules added
+				// since connect (rules.yaml is re-read every few minutes).
+				if err := e.subscribeStates(c); err != nil {
+					slog.Warn("state resubscribe", "error", err)
+				}
 			}
 			if now.Sub(last) > stallTimeout {
 				slog.Error("mqtt stalled: no heartbeat loopback", "since", last)

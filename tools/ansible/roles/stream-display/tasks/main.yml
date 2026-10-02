@@ -8,7 +8,7 @@
   ansible.builtin.fail:
     msg: "each stream_display_instances entry needs a non-empty name and start_url (set in host_vars)."
   loop: "{{ stream_display_instances }}"
-  loop_control: { label: "{{ item.name | default('?') }}" }
+  loop_control: {label: "{{ item.name | default('?') }}"}
   when: (item.name | default('')) == "" or (item.start_url | default('')) == ""
 
 - name: Install system packages
@@ -172,7 +172,7 @@
     mode: '0644'
   become: true
   loop: "{{ stream_display_instances }}"
-  loop_control: { loop_var: inst, label: "{{ inst.name }}" }
+  loop_control: {loop_var: inst, label: "{{ inst.name }}"}
 
 - name: Render per-instance config
   ansible.builtin.template:
@@ -183,7 +183,7 @@
     mode: '0644'
   become: true
   loop: "{{ stream_display_instances }}"
-  loop_control: { loop_var: inst, label: "{{ inst.name }}" }
+  loop_control: {loop_var: inst, label: "{{ inst.name }}"}
 
 - name: Reload systemd before (re)starting instances
   ansible.builtin.systemd:

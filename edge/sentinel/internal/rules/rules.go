@@ -124,3 +124,28 @@ func (r *Reader) RepeatWindow(name string) time.Duration {
 	}
 	return 0
 }
+
+// StateTopics returns the distinct state_topic values across all rules.
+func (r *Reader) StateTopics() []string {
+	rules, _ := r.Rules()
+	seen := map[string]bool{}
+	var out []string
+	for _, rule := range rules {
+		if rule.StateTopic != "" && !seen[rule.StateTopic] {
+			seen[rule.StateTopic] = true
+			out = append(out, rule.StateTopic)
+		}
+	}
+	return out
+}
+
+// Find returns the rule with the given name.
+func (r *Reader) Find(name string) (Rule, bool) {
+	rules, _ := r.Rules()
+	for _, rule := range rules {
+		if rule.Name == name {
+			return rule, true
+		}
+	}
+	return Rule{}, false
+}

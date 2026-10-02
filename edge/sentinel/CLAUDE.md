@@ -32,7 +32,16 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   production ones. The app reports `env` on registration; the server routes
   per device and prunes on `410` / `BadDeviceToken`.
 - **Push policy:** first sighting of any alert; `repeat` only when critical;
-  server-side mutes (phase 3) suppress.
+  server-side mutes suppress.
+- **Mute ≠ enable.** Mute lives in sentinel's `mutes` table and only stops
+  pushes. Enable/disable publishes to the rule's Marshal `enable_topic`,
+  which parks the *automation* for every rule sharing that topic (the five
+  nightlights share one). `false` is published retained so a Marshal restart
+  stays parked; `true` is sent non-retained and the retained value cleared,
+  because Marshal re-applies retained enables on reconnect and a retained
+  `true` would wipe manual overrides each time. Owner state comes from
+  subscribing to every `state_topic` in rules.yaml (retained, so warm on
+  connect; re-subscribed each heartbeat for new rules).
 - **Commit, then push, then SSE.** A notification tap must never 404.
 
 ## Local run
