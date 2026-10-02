@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +27,26 @@ type source struct {
 	Muted         bool         `json:"muted"`
 	MutedUntil    *time.Time   `json:"muted_until"`
 	Policy        store.Policy `json:"policy"`
+}
+
+// kindMute is the whole-kind mute state reported under "kind_mutes".
+type kindMute struct {
+	Muted      bool       `json:"muted"`
+	MutedUntil *time.Time `json:"muted_until"`
+}
+
+var muteableKinds = []string{model.KindSensor, model.KindDashboard, model.KindCamera}
+
+func (s *Server) kindMutes(mutes map[string]store.Mute) map[string]kindMute {
+	out := map[string]kindMute{}
+	for _, k := range muteableKinds {
+		km := kindMute{}
+		if m, ok := mutes[policy.KindMuteKey(k)]; ok {
+			km.Muted, km.MutedUntil = true, m.Until
+		}
+		out[k] = km
+	}
+	return out
 }
 
 type quietView struct {
@@ -123,7 +144,81 @@ func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	if all == nil {
 		all = []source{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sources": all, "quiet_hours": s.quietView(r)})
+	mutes, err := s.store.Mutes(r.Context(), time.Now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": all, "kind_mutes": s.kindMutes(mutes), "quiet_hours": s.quietView(r)})
+}
+
+// parseMuteBody reads {"minutes": n|null} or {"until": RFC3339}. nil until
+// means indefinite. Writes the 400 itself and returns ok=false on bad input.
+func parseMuteBody(w http.ResponseWriter, r *http.Request) (until *time.Time, ok bool) {
+	var body struct {
+		Minutes *int    `json:"minutes"`
+		Until   *string `json:"until"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
+	switch {
+	case body.Until != nil:
+		t, err := time.Parse(time.RFC3339, *body.Until)
+		if err != nil || !t.After(time.Now()) {
+			writeErr(w, http.StatusBadRequest, "until must be a future RFC3339 time")
+			return nil, false
+		}
+		return &t, true
+	case body.Minutes != nil:
+		if *body.Minutes <= 0 {
+			writeErr(w, http.StatusBadRequest, "minutes must be > 0 or null")
+			return nil, false
+		}
+		t := time.Now().Add(time.Duration(*body.Minutes) * time.Minute)
+		return &t, true
+	}
+	return nil, true
+}
+
+// POST /v1/sources/kind/{kind}/mute — mute every source of a kind, including
+// ones that have not fired yet (dashboard rules only appear after they do).
+func (s *Server) muteKind(w http.ResponseWriter, r *http.Request) {
+	kind := r.PathValue("kind")
+	if !slices.Contains(muteableKinds, kind) {
+		writeErr(w, http.StatusNotFound, "no such kind")
+		return
+	}
+	until, ok := parseMuteBody(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.SetMute(r.Context(), policy.KindMuteKey(kind), until); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.respondKind(w, r, kind)
+}
+
+func (s *Server) unmuteKind(w http.ResponseWriter, r *http.Request) {
+	kind := r.PathValue("kind")
+	if !slices.Contains(muteableKinds, kind) {
+		writeErr(w, http.StatusNotFound, "no such kind")
+		return
+	}
+	if err := s.store.ClearMute(r.Context(), policy.KindMuteKey(kind)); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.respondKind(w, r, kind)
+}
+
+func (s *Server) respondKind(w http.ResponseWriter, r *http.Request, kind string) {
+	mutes, err := s.store.Mutes(r.Context(), time.Now())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	km := s.kindMutes(mutes)[kind]
+	writeJSON(w, http.StatusOK, map[string]any{"kind": kind, "muted": km.Muted, "muted_until": km.MutedUntil})
 }
 
 // POST /v1/sources/{id}/mute {"minutes": n|null} or {"until": RFC3339}
@@ -137,27 +232,9 @@ func (s *Server) muteSource(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	var body struct {
-		Minutes *int    `json:"minutes"`
-		Until   *string `json:"until"`
-	}
-	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body)
-	var until *time.Time
-	switch {
-	case body.Until != nil:
-		t, err := time.Parse(time.RFC3339, *body.Until)
-		if err != nil || !t.After(time.Now()) {
-			writeErr(w, http.StatusBadRequest, "until must be a future RFC3339 time")
-			return
-		}
-		until = &t
-	case body.Minutes != nil:
-		if *body.Minutes <= 0 {
-			writeErr(w, http.StatusBadRequest, "minutes must be > 0 or null")
-			return
-		}
-		t := time.Now().Add(time.Duration(*body.Minutes) * time.Minute)
-		until = &t
+	until, ok := parseMuteBody(w, r)
+	if !ok {
+		return
 	}
 	if err := s.store.SetMute(r.Context(), id, until); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

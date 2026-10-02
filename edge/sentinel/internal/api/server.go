@@ -78,6 +78,8 @@ func New(d Deps) *Server {
 	s.mux.HandleFunc("POST /v1/sources/{id}/mute", s.muteSource)
 	s.mux.HandleFunc("DELETE /v1/sources/{id}/mute", s.unmuteSource)
 	s.mux.HandleFunc("PUT /v1/sources/{id}/policy", s.putPolicy)
+	s.mux.HandleFunc("POST /v1/sources/kind/{kind}/mute", s.muteKind)
+	s.mux.HandleFunc("DELETE /v1/sources/kind/{kind}/mute", s.unmuteKind)
 	s.mux.HandleFunc("GET /v1/settings/quiet-hours", s.getQuietHours)
 	s.mux.HandleFunc("PUT /v1/settings/quiet-hours", s.putQuietHours)
 	return s

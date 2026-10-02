@@ -100,14 +100,19 @@ func (d *Decider) SetQuietHours(ctx context.Context, q QuietHours) error {
 	return d.store.SetSetting(ctx, quietKey, string(b))
 }
 
+// KindMuteKey is the mutes-table key for a whole kind ("kind:dashboard").
+// It shares the table with per-source mutes; source ids never contain ':'
+// so the namespaces cannot collide and no schema change is needed.
+func KindMuteKey(kind string) string { return "kind:" + kind }
+
 // Decision explains a verdict; Reason is for logs and the test endpoint.
 type Decision struct {
 	Push   bool
 	Reason string
 }
 
-// Decide applies the ordered rules from the README: pushable event, mute,
-// object filter, quiet hours.
+// Decide applies the ordered rules from the README: pushable event, mute
+// (source, then kind), object filter, quiet hours.
 func (d *Decider) Decide(ctx context.Context, ev model.Event) Decision {
 	a := ev.Alert
 	pol, err := d.store.GetPolicy(ctx, a.Rule)
@@ -127,9 +132,12 @@ func (d *Decider) Decide(ctx context.Context, ev model.Event) Decision {
 		return Decision{false, "not a pushable event"}
 	}
 
-	// 2. muted?
+	// 2. muted? (the source itself, or its whole kind)
 	if muted, err := d.store.IsMuted(ctx, a.Rule, time.Now()); err == nil && muted {
 		return Decision{false, "source muted"}
+	}
+	if muted, err := d.store.IsMuted(ctx, KindMuteKey(a.Kind), time.Now()); err == nil && muted {
+		return Decision{false, "kind muted"}
 	}
 
 	// 3. camera object filter

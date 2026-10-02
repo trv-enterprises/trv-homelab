@@ -145,3 +145,18 @@ func TestHLSPlaylistThroughProxyIsNeverGzipped(t *testing.T) {
 		}
 	}
 }
+
+// ServeMux rejects conflicting patterns by panicking at registration, which
+// would take the whole server down at boot. Build the router once here so a
+// bad pattern fails a test instead of a deploy.
+func TestRoutesRegisterWithoutConflict(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("route registration panicked: %v", r)
+		}
+	}()
+	s := New(Deps{Token: "0123456789abcdef", FrigateURL: "http://frigate.invalid"})
+	if s == nil || s.Handler() == nil {
+		t.Fatal("no server")
+	}
+}

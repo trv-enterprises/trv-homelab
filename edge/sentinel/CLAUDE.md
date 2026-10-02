@@ -41,6 +41,11 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   → quiet hours (server-local time, `TZ` in compose). Policies and quiet
   hours live in SQLite; cameras come from Frigate's `/api/config` (cached
   10m) plus any camera seen in stored alerts.
+- **Kind mutes live in the same `mutes` table** under the reserved key
+  `kind:<kind>` (`policy.KindMuteKey`). Source ids never contain `:`, so no
+  migration and no second table; `Mutes()` prunes expired ones the same way.
+  The decider checks source then kind, so the app's "Mute all dashboard"
+  covers rules that have not fired yet.
 - **Mute ≠ enable.** Mute lives in sentinel's `mutes` table and only stops
   pushes. Enable/disable publishes to the rule's Marshal `enable_topic`,
   which parks the *automation* for every rule sharing that topic (the five

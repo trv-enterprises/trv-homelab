@@ -94,8 +94,17 @@ GET /v1/sources
 | `POST /v1/sources/{id}/mute` | `{"minutes": n}` or `{"minutes": null}` (until unmuted) or `{"until": "<RFC3339>"}` | the source |
 | `DELETE /v1/sources/{id}/mute` | | the source |
 | `PUT /v1/sources/{id}/policy` | any subset of `{"repeats": "none"\|"critical"\|"all", "objects": [..], "always_notify": bool}` | the source |
+| `POST /v1/sources/kind/{kind}/mute` | same body as a source mute | `{kind, muted, muted_until}` |
+| `DELETE /v1/sources/kind/{kind}/mute` | | same |
 | `GET /v1/settings/quiet-hours` | | `{enabled, start, end, timezone, active_now}` |
 | `PUT /v1/settings/quiet-hours` | any subset of `{"enabled": bool, "start": "HH:MM", "end": "HH:MM"}` | same |
+
+`GET /v1/sources` also returns `kind_mutes`: `{"sensor": {muted, muted_until},
+"dashboard": {...}, "camera": {...}}`. A kind mute (0.4.1) silences every
+source of that kind, including ones that have not fired yet, which is the
+only way to mute dashboard rules before their first alert. It is checked
+right after the per-source mute and is independent of it: unmuting a kind
+leaves individual source mutes in place.
 
 Policy fields:
 
@@ -111,7 +120,7 @@ Push decision, in order, for every alert event:
 
 1. Is it a pushable event? First sighting: yes. Sensor repeat: by `repeats`.
    Anything else (resolved, ended, Frigate merges): no.
-2. Muted? No push. Expired mutes are ignored.
+2. Muted, as a source or as a kind? No push. Expired mutes are ignored.
 3. Camera `objects` filter fails? No push.
 4. Quiet hours active and not `always_notify`? No push.
 

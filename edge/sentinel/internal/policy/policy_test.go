@@ -66,6 +66,20 @@ func TestDecide(t *testing.T) {
 	}
 	_ = st.ClearMute(ctx, "garage")
 
+	// kind-level mute covers a source that has never been seen before
+	dash := model.Alert{ID: "9", Kind: model.KindDashboard, Rule: "dashboard_brand-new-rule", Severity: "warning", Status: model.StatusActive}
+	if !d.Decide(ctx, model.Event{Type: "created", Created: true, Alert: dash}).Push {
+		t.Fatal("dashboard alert should push before any mute")
+	}
+	_ = st.SetMute(ctx, KindMuteKey(model.KindDashboard), nil)
+	if dec := d.Decide(ctx, model.Event{Type: "created", Created: true, Alert: dash}); dec.Push || dec.Reason != "kind muted" {
+		t.Fatalf("kind mute ignored: %+v", dec)
+	}
+	if dec := d.Decide(ctx, model.Event{Type: "created", Created: true, Alert: sensor}); !dec.Push {
+		t.Fatalf("kind mute leaked onto another kind: %+v", dec)
+	}
+	_ = st.ClearMute(ctx, KindMuteKey(model.KindDashboard))
+
 	cam := model.Alert{ID: "2", Kind: model.KindCamera, Rule: "frigate_driveway", Severity: "warning", Status: model.StatusActive,
 		Frigate: &model.Frigate{Objects: []string{"car"}}}
 	_ = st.SetPolicy(ctx, "frigate_driveway", store.Policy{Repeats: "none", Objects: []string{"person"}})
