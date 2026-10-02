@@ -17,8 +17,10 @@ import (
 
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/api"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/config"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/policy"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/push"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/rules"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/store"
@@ -49,7 +51,10 @@ func main() {
 	rulesReader := rules.NewReader(cfg.RulesPath, 5*time.Minute)
 	signer := api.NewSigner(cfg.PublicBaseURL, cfg.APIToken, mediaLinkTTL)
 
-	pusher, err := push.New(push.Config{Key: cfg.APNSKey, KeyID: cfg.APNSKeyID, TeamID: cfg.APNSTeamID, BundleID: cfg.APNSBundleID}, st, signer)
+	decider := policy.NewDecider(st, time.Local)
+	cameras := frigate.NewCameras(cfg.FrigateURL, 10*time.Minute)
+
+	pusher, err := push.New(push.Config{Key: cfg.APNSKey, KeyID: cfg.APNSKeyID, TeamID: cfg.APNSTeamID, BundleID: cfg.APNSBundleID}, st, signer, policy.Adapter{Decider: decider})
 	if err != nil {
 		slog.Error("apns", "error", err)
 		os.Exit(1)
@@ -71,7 +76,7 @@ func main() {
 
 	srv := api.New(api.Deps{
 		Token: cfg.APIToken, Store: st, Rules: rulesReader, Pusher: pusher, Engine: engine,
-		Signer: signer, Hub: hub, FrigateURL: cfg.FrigateURL,
+		Signer: signer, Hub: hub, Decider: decider, Cameras: cameras, FrigateURL: cfg.FrigateURL,
 	})
 	httpSrv := &http.Server{
 		Addr:              cfg.HTTPAddr,

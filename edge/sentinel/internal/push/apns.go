@@ -33,7 +33,11 @@ type Config struct {
 type DeviceStore interface {
 	ListDevices(ctx context.Context) ([]model.Device, error)
 	DeleteDevice(ctx context.Context, token string) error
-	IsMuted(ctx context.Context, rule string, now time.Time) (bool, error)
+}
+
+// Decider answers "should this event push?" (internal/policy).
+type Decider interface {
+	Decide(ctx context.Context, ev model.Event) (push bool, reason string)
 }
 
 // LinkSigner mints the signed thumbnail URL embedded in the push so the
@@ -47,11 +51,12 @@ type Pusher struct {
 	topic               string
 	devices             DeviceStore
 	links               LinkSigner
+	decider             Decider
 }
 
 // New builds a Pusher. A nil return with nil error means push is disabled
 // (no APNs config); callers should treat that as a no-op sender.
-func New(cfg Config, devices DeviceStore, links LinkSigner) (*Pusher, error) {
+func New(cfg Config, devices DeviceStore, links LinkSigner, decider Decider) (*Pusher, error) {
 	if len(cfg.Key) == 0 {
 		return nil, nil
 	}
@@ -66,6 +71,7 @@ func New(cfg Config, devices DeviceStore, links LinkSigner) (*Pusher, error) {
 		topic:      cfg.BundleID,
 		devices:    devices,
 		links:      links,
+		decider:    decider,
 	}, nil
 }
 
@@ -78,22 +84,23 @@ type Result struct {
 	ApnsID string `json:"apns_id,omitempty"`
 }
 
-// Notify decides whether an event deserves a push and sends it to every
-// registered device. Rules: first sighting of any alert; repeats only when
-// critical. Muted rules are skipped.
+// Notify asks the policy layer whether the event pushes and, if so, sends
+// it to every registered device.
 func (p *Pusher) Notify(ctx context.Context, ev model.Event) {
 	if p == nil {
 		return
 	}
 	a := ev.Alert
-	if !ev.Created && !(a.Kind == model.KindSensor && a.Severity == model.SeverityCritical && ev.Type == "updated" && a.Status == model.StatusActive) {
-		return
-	}
-	if ev.Created || a.RepeatCount > 0 {
-		if muted, err := p.devices.IsMuted(ctx, a.Rule, time.Now()); err == nil && muted {
-			slog.Info("push suppressed: rule muted", "rule", a.Rule)
+	if p.decider != nil {
+		ok, reason := p.decider.Decide(ctx, ev)
+		if !ok {
+			if ev.Created || a.RepeatCount > 0 {
+				slog.Info("push suppressed", "alert", a.ID, "source", a.Rule, "reason", reason)
+			}
 			return
 		}
+	} else if !ev.Created {
+		return
 	}
 	for _, r := range p.SendAlert(ctx, a) {
 		if r.Status == http.StatusOK {

@@ -15,8 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/policy"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/push"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/rules"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/store"
@@ -30,6 +32,8 @@ type Server struct {
 	engine  *ingest.Engine
 	signer  *Signer
 	hub     *Hub
+	decider *policy.Decider
+	cameras *frigate.Cameras
 	proxy   http.Handler
 	mux     *http.ServeMux
 	started time.Time
@@ -43,12 +47,14 @@ type Deps struct {
 	Engine     *ingest.Engine
 	Signer     *Signer
 	Hub        *Hub
+	Decider    *policy.Decider
+	Cameras    *frigate.Cameras
 	FrigateURL string
 }
 
 func New(d Deps) *Server {
 	s := &Server{token: d.Token, store: d.Store, rules: d.Rules, pusher: d.Pusher, engine: d.Engine,
-		signer: d.Signer, hub: d.Hub, mux: http.NewServeMux(), started: time.Now()}
+		signer: d.Signer, hub: d.Hub, decider: d.Decider, cameras: d.Cameras, mux: http.NewServeMux(), started: time.Now()}
 	s.proxy = newFrigateProxy(d.FrigateURL, d.Signer)
 
 	s.mux.HandleFunc("GET /healthz", s.health)
@@ -65,6 +71,12 @@ func New(d Deps) *Server {
 	s.mux.HandleFunc("POST /v1/rules/{name}/mute", s.muteRule)
 	s.mux.HandleFunc("DELETE /v1/rules/{name}/mute", s.unmuteRule)
 	s.mux.HandleFunc("POST /v1/rules/{name}/enable", s.enableRule)
+	s.mux.HandleFunc("GET /v1/sources", s.listSources)
+	s.mux.HandleFunc("POST /v1/sources/{id}/mute", s.muteSource)
+	s.mux.HandleFunc("DELETE /v1/sources/{id}/mute", s.unmuteSource)
+	s.mux.HandleFunc("PUT /v1/sources/{id}/policy", s.putPolicy)
+	s.mux.HandleFunc("GET /v1/settings/quiet-hours", s.getQuietHours)
+	s.mux.HandleFunc("PUT /v1/settings/quiet-hours", s.putQuietHours)
 	return s
 }
 

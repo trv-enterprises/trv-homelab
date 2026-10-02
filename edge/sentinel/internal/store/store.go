@@ -535,3 +535,79 @@ func (s *Store) Mutes(ctx context.Context, now time.Time) (map[string]Mute, erro
 	}
 	return out, nil
 }
+
+// ---- policies & settings (0.3.0) ----------------------------------------
+
+// Policy is a source's notification policy. Zero value is not the default;
+// use DefaultPolicy.
+type Policy struct {
+	Repeats      string   `json:"repeats"` // none | critical | all
+	Objects      []string `json:"objects"`
+	AlwaysNotify bool     `json:"always_notify"`
+}
+
+func DefaultPolicy() Policy { return Policy{Repeats: "critical", Objects: []string{}} }
+
+// Policies returns every stored policy keyed by source id.
+func (s *Store) Policies(ctx context.Context) (map[string]Policy, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT source, repeats, objects, always_notify FROM policies`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]Policy{}
+	for rows.Next() {
+		var src, repeats, objects string
+		var always int
+		if err := rows.Scan(&src, &repeats, &objects, &always); err != nil {
+			return nil, err
+		}
+		p := Policy{Repeats: repeats, AlwaysNotify: always == 1}
+		_ = json.Unmarshal([]byte(objects), &p.Objects)
+		if p.Objects == nil {
+			p.Objects = []string{}
+		}
+		out[src] = p
+	}
+	return out, rows.Err()
+}
+
+// GetPolicy returns the stored policy or the default.
+func (s *Store) GetPolicy(ctx context.Context, source string) (Policy, error) {
+	all, err := s.Policies(ctx)
+	if err != nil {
+		return DefaultPolicy(), err
+	}
+	if p, ok := all[source]; ok {
+		return p, nil
+	}
+	return DefaultPolicy(), nil
+}
+
+// SetPolicy stores a full policy for a source.
+func (s *Store) SetPolicy(ctx context.Context, source string, p Policy) error {
+	objs, _ := json.Marshal(nonNil(p.Objects))
+	always := 0
+	if p.AlwaysNotify {
+		always = 1
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO policies (source, repeats, objects, always_notify) VALUES (?, ?, ?, ?)
+		ON CONFLICT(source) DO UPDATE SET repeats = excluded.repeats, objects = excluded.objects, always_notify = excluded.always_notify`,
+		source, p.Repeats, string(objs), always)
+	return err
+}
+
+func (s *Store) GetSetting(ctx context.Context, key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return v, err == nil, err
+}
+
+func (s *Store) SetSetting(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}

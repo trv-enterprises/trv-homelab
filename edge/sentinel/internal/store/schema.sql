@@ -43,3 +43,17 @@ CREATE TABLE IF NOT EXISTS mutes (
     rule  TEXT PRIMARY KEY,
     until TEXT
 );
+
+-- Per-source notification policy (0.3.0). Absent row = defaults.
+CREATE TABLE IF NOT EXISTS policies (
+    source        TEXT PRIMARY KEY,
+    repeats       TEXT NOT NULL DEFAULT 'critical',
+    objects       TEXT NOT NULL DEFAULT '[]',
+    always_notify INTEGER NOT NULL DEFAULT 0
+);
+
+-- Small key/value settings (quiet hours).
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

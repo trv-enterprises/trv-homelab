@@ -33,6 +33,14 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   per device and prunes on `410` / `BadDeviceToken`.
 - **Push policy:** first sighting of any alert; `repeat` only when critical;
   server-side mutes suppress.
+- **Notifications are controlled per *source*, not per rule.** A source is a
+  Marshal rule with an `alert:` block or a Frigate camera, id = the alert's
+  `rule` field (`frigate_<camera>` for cameras). Action-only rules (the
+  nightlights) never notify and are not sources. `internal/policy.Decider`
+  is the single push decision: pushable event → mute → camera object filter
+  → quiet hours (server-local time, `TZ` in compose). Policies and quiet
+  hours live in SQLite; cameras come from Frigate's `/api/config` (cached
+  10m) plus any camera seen in stored alerts.
 - **Mute ≠ enable.** Mute lives in sentinel's `mutes` table and only stops
   pushes. Enable/disable publishes to the rule's Marshal `enable_topic`,
   which parks the *automation* for every rule sharing that topic (the five

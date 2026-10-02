@@ -39,7 +39,8 @@ All routes need `Authorization: Bearer <API_TOKEN>` except `/healthz`.
 | `POST /v1/devices` `{token, env, name, app_version}` | register an APNs device token (upsert) |
 | `GET /v1/devices`, `DELETE /v1/devices/{token}` | |
 | `POST /v1/push/test` `{token?, env?}` | send a test push |
-| `GET /v1/rules` | Marshal rules from the mounted `rules.yaml`, plus `muted`/`muted_until` (sentinel) and `owner` (Marshal's retained `state_topic`: automation/override/parked) |
+| `GET /v1/sources`, mute/policy, quiet hours | see **Notification sources** below |
+| `GET /v1/rules` | all Marshal rules from the mounted `rules.yaml`, with `muted`/`muted_until` and `owner` (Marshal's retained `state_topic`: automation/override/parked). Automations live here; notifications live under `/v1/sources` |
 | `POST /v1/rules/{name}/mute` `{minutes: n\|null}` | suppress pushes for a rule (null = until unmuted); the rule still fires and is listed |
 | `DELETE /v1/rules/{name}/mute` | lift the mute |
 | `POST /v1/rules/{name}/enable` `{enabled: bool}` | publish to the rule's Marshal `enable_topic` (parks/resumes every rule sharing that topic); 409 for alert-only rules, which Marshal cannot park |
@@ -60,6 +61,65 @@ never carries the token itself. A camera alert's `media` object carries:
 Playlists are rewritten on the way through so every segment line carries its
 own signed query (AVPlayer drops the playlist's query when resolving relative
 segment names).
+
+## Notification sources (0.3.0 contract)
+
+The things that notify you are *sources*: every Marshal rule with an `alert:`
+block, and every Frigate camera. Action-only Marshal rules (the nightlights)
+are not sources and never appear here; parking them is a separate concern
+(see `/v1/rules/{name}/enable`) and the app does not offer it.
+
+A source id is the alert's `rule` field: the Marshal rule name, or
+`frigate_<camera>` for a camera. Mutes and policies are keyed by that id.
+
+```json
+GET /v1/sources
+{
+  "sources": [
+    { "id": "large_garage_door_left_open", "kind": "sensor", "name": "Large garage door left open",
+      "rule": "large_garage_door_left_open", "severity": "warning", "repeat_minutes": 60,
+      "muted": false, "muted_until": null,
+      "policy": { "repeats": "critical", "objects": [], "always_notify": false } },
+    { "id": "frigate_driveway", "kind": "camera", "name": "Driveway", "camera": "driveway",
+      "muted": true, "muted_until": "2026-10-02T07:00:00Z",
+      "policy": { "repeats": "none", "objects": ["person"], "always_notify": false } }
+  ],
+  "quiet_hours": { "enabled": true, "start": "23:00", "end": "07:00", "timezone": "America/Chicago", "active_now": false }
+}
+```
+
+| Route | Body | Returns |
+|---|---|---|
+| `GET /v1/sources` | | sources + quiet hours (above) |
+| `POST /v1/sources/{id}/mute` | `{"minutes": n}` or `{"minutes": null}` (until unmuted) or `{"until": "<RFC3339>"}` | the source |
+| `DELETE /v1/sources/{id}/mute` | | the source |
+| `PUT /v1/sources/{id}/policy` | any subset of `{"repeats": "none"\|"critical"\|"all", "objects": [..], "always_notify": bool}` | the source |
+| `GET /v1/settings/quiet-hours` | | `{enabled, start, end, timezone, active_now}` |
+| `PUT /v1/settings/quiet-hours` | any subset of `{"enabled": bool, "start": "HH:MM", "end": "HH:MM"}` | same |
+
+Policy fields:
+
+- `repeats` (sensor sources): which Marshal `repeat` messages push. `none`,
+  `critical` (default: only critical rules), or `all`. The first sighting
+  always pushes unless muted or in quiet hours.
+- `objects` (camera sources): push only when the review's objects include one
+  of these labels (Frigate labels: `person`, `car`, `dog`, …). Empty means
+  any object. Default empty.
+- `always_notify`: exempt from quiet hours. Default false.
+
+Push decision, in order, for every alert event:
+
+1. Is it a pushable event? First sighting: yes. Sensor repeat: by `repeats`.
+   Anything else (resolved, ended, Frigate merges): no.
+2. Muted? No push. Expired mutes are ignored.
+3. Camera `objects` filter fails? No push.
+4. Quiet hours active and not `always_notify`? No push.
+
+Nothing above changes what is *recorded*: every alert is stored and streamed
+regardless; policy only decides the push.
+
+`POST /v1/rules/{name}/mute` and `DELETE` remain as aliases for sources that
+are Marshal rules; new clients should use `/v1/sources`.
 
 ## Configuration (env)
 
