@@ -42,6 +42,10 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   `true` would wipe manual overrides each time. Owner state comes from
   subscribing to every `state_topic` in rules.yaml (retained, so warm on
   connect; re-subscribed each heartbeat for new rules).
+  Known noise: the retained clear is an empty payload, which Marshal logs
+  as `unparseable enable payload` once per rule sharing the topic. Harmless;
+  the clean fix is for Marshal to ignore empty payloads silently (trv-marshal
+  change, pending).
 - **Commit, then push, then SSE.** A notification tap must never 404.
 
 ## Local run
