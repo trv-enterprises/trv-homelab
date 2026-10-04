@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS policies (
     source        TEXT PRIMARY KEY,
     repeats       TEXT NOT NULL DEFAULT 'critical',
     objects       TEXT NOT NULL DEFAULT '[]',
-    always_notify INTEGER NOT NULL DEFAULT 0
+    always_notify INTEGER NOT NULL DEFAULT 0,
+    passive       INTEGER NOT NULL DEFAULT 0
 );
 
 -- Small key/value settings (quiet hours).

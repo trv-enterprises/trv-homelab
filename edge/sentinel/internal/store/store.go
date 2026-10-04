@@ -50,10 +50,41 @@ func Open(path string) (*Store, error) {
 // migrate adds columns that CREATE TABLE IF NOT EXISTS cannot add to an
 // existing file. Each entry is idempotent: skipped when the column exists.
 func migrate(db *sql.DB) error {
-	rows, err := db.Query(`PRAGMA table_info(alerts)`)
-	if err != nil {
-		return err
+	adds := []struct{ table, name, ddl string }{
+		{"alerts", "link", `ALTER TABLE alerts ADD COLUMN link TEXT NOT NULL DEFAULT ''`},
+		{"alerts", "dashboard_id", `ALTER TABLE alerts ADD COLUMN dashboard_id TEXT NOT NULL DEFAULT ''`},
+		{"alerts", "dashboard_vars", `ALTER TABLE alerts ADD COLUMN dashboard_vars TEXT NOT NULL DEFAULT '{}'`},
+		{"alerts", "store_name", `ALTER TABLE alerts ADD COLUMN store_name TEXT NOT NULL DEFAULT ''`},
+		{"alerts", "subtitle", `ALTER TABLE alerts ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''`},
+		{"policies", "passive", `ALTER TABLE policies ADD COLUMN passive INTEGER NOT NULL DEFAULT 0`},
 	}
+	have := map[string]map[string]bool{}
+	for _, a := range adds {
+		if have[a.table] == nil {
+			cols, err := columns(db, a.table)
+			if err != nil {
+				return err
+			}
+			have[a.table] = cols
+		}
+		if have[a.table][a.name] {
+			continue
+		}
+		if _, err := db.Exec(a.ddl); err != nil {
+			return fmt.Errorf("add column %s.%s: %w", a.table, a.name, err)
+		}
+	}
+	return nil
+}
+
+// columns returns the column names of a table. table is one of our own
+// constants, never input: PRAGMA takes no bind parameters.
+func columns(db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	have := map[string]bool{}
 	for rows.Next() {
 		var cid int
@@ -61,28 +92,11 @@ func migrate(db *sql.DB) error {
 		var notnull, pk int
 		var dflt sql.NullString
 		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
-			rows.Close()
-			return err
+			return nil, err
 		}
 		have[name] = true
 	}
-	rows.Close()
-	adds := []struct{ name, ddl string }{
-		{"link", `ALTER TABLE alerts ADD COLUMN link TEXT NOT NULL DEFAULT ''`},
-		{"dashboard_id", `ALTER TABLE alerts ADD COLUMN dashboard_id TEXT NOT NULL DEFAULT ''`},
-		{"dashboard_vars", `ALTER TABLE alerts ADD COLUMN dashboard_vars TEXT NOT NULL DEFAULT '{}'`},
-		{"store_name", `ALTER TABLE alerts ADD COLUMN store_name TEXT NOT NULL DEFAULT ''`},
-		{"subtitle", `ALTER TABLE alerts ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''`},
-	}
-	for _, a := range adds {
-		if have[a.name] {
-			continue
-		}
-		if _, err := db.Exec(a.ddl); err != nil {
-			return fmt.Errorf("add column %s: %w", a.name, err)
-		}
-	}
-	return nil
+	return have, rows.Err()
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -595,13 +609,16 @@ type Policy struct {
 	Repeats      string   `json:"repeats"` // none | critical | all
 	Objects      []string `json:"objects"`
 	AlwaysNotify bool     `json:"always_notify"`
+	// Passive (0.6.0) changes how a push is delivered, never whether: it
+	// goes to Notification Center with no banner, sound or screen wake.
+	Passive bool `json:"passive"`
 }
 
 func DefaultPolicy() Policy { return Policy{Repeats: "critical", Objects: []string{}} }
 
 // Policies returns every stored policy keyed by source id.
 func (s *Store) Policies(ctx context.Context) (map[string]Policy, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT source, repeats, objects, always_notify FROM policies`)
+	rows, err := s.db.QueryContext(ctx, `SELECT source, repeats, objects, always_notify, passive FROM policies`)
 	if err != nil {
 		return nil, err
 	}
@@ -609,11 +626,11 @@ func (s *Store) Policies(ctx context.Context) (map[string]Policy, error) {
 	out := map[string]Policy{}
 	for rows.Next() {
 		var src, repeats, objects string
-		var always int
-		if err := rows.Scan(&src, &repeats, &objects, &always); err != nil {
+		var always, passive int
+		if err := rows.Scan(&src, &repeats, &objects, &always, &passive); err != nil {
 			return nil, err
 		}
-		p := Policy{Repeats: repeats, AlwaysNotify: always == 1}
+		p := Policy{Repeats: repeats, AlwaysNotify: always == 1, Passive: passive == 1}
 		_ = json.Unmarshal([]byte(objects), &p.Objects)
 		if p.Objects == nil {
 			p.Objects = []string{}
@@ -638,13 +655,17 @@ func (s *Store) GetPolicy(ctx context.Context, source string) (Policy, error) {
 // SetPolicy stores a full policy for a source.
 func (s *Store) SetPolicy(ctx context.Context, source string, p Policy) error {
 	objs, _ := json.Marshal(nonNil(p.Objects))
-	always := 0
+	always, passive := 0, 0
 	if p.AlwaysNotify {
 		always = 1
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO policies (source, repeats, objects, always_notify) VALUES (?, ?, ?, ?)
-		ON CONFLICT(source) DO UPDATE SET repeats = excluded.repeats, objects = excluded.objects, always_notify = excluded.always_notify`,
-		source, p.Repeats, string(objs), always)
+	if p.Passive {
+		passive = 1
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO policies (source, repeats, objects, always_notify, passive) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(source) DO UPDATE SET repeats = excluded.repeats, objects = excluded.objects,
+			always_notify = excluded.always_notify, passive = excluded.passive`,
+		source, p.Repeats, string(objs), always, passive)
 	return err
 }
 

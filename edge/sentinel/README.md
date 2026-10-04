@@ -82,10 +82,10 @@ GET /v1/sources
     { "id": "large_garage_door_left_open", "kind": "sensor", "name": "Large garage door left open",
       "rule": "large_garage_door_left_open", "severity": "warning", "repeat_minutes": 60,
       "muted": false, "muted_until": null,
-      "policy": { "repeats": "critical", "objects": [], "always_notify": false } },
+      "policy": { "repeats": "critical", "objects": [], "always_notify": false, "passive": false } },
     { "id": "frigate_driveway", "kind": "camera", "name": "Driveway", "camera": "driveway",
       "muted": true, "muted_until": "2026-10-02T07:00:00Z",
-      "policy": { "repeats": "none", "objects": ["person"], "always_notify": false } }
+      "policy": { "repeats": "none", "objects": ["person"], "always_notify": false, "passive": false } }
   ],
   "quiet_hours": { "enabled": true, "start": "23:00", "end": "07:00", "timezone": "America/Chicago", "active_now": false }
 }
@@ -96,7 +96,7 @@ GET /v1/sources
 | `GET /v1/sources` | | sources + quiet hours (above) |
 | `POST /v1/sources/{id}/mute` | `{"minutes": n}` or `{"minutes": null}` (until unmuted) or `{"until": "<RFC3339>"}` | the source |
 | `DELETE /v1/sources/{id}/mute` | | the source |
-| `PUT /v1/sources/{id}/policy` | any subset of `{"repeats": "none"\|"critical"\|"all", "objects": [..], "always_notify": bool}` | the source |
+| `PUT /v1/sources/{id}/policy` | any subset of `{"repeats": "none"\|"critical"\|"all", "objects": [..], "always_notify": bool, "passive": bool}` | the source |
 | `POST /v1/sources/kind/{kind}/mute` | same body as a source mute | `{kind, muted, muted_until}` |
 | `DELETE /v1/sources/kind/{kind}/mute` | | same |
 | `GET /v1/settings/quiet-hours` | | `{enabled, start, end, timezone, active_now}` |
@@ -118,6 +118,8 @@ Policy fields:
   of these labels (Frigate labels: `person`, `car`, `dog`, …). Empty means
   any object. Default empty.
 - `always_notify`: exempt from quiet hours. Default false.
+- `passive` (0.6.0): deliver as a passive notification. Default false. See
+  **Interruption level** below.
 
 Push decision, in order, for every alert event:
 
@@ -129,6 +131,26 @@ Push decision, in order, for every alert event:
 
 Nothing above changes what is *recorded*: every alert is stored and streamed
 regardless; policy only decides the push.
+
+### Interruption level (0.6.0)
+
+Every push carries `aps.interruption-level`, which tells iOS how to present
+it. It is chosen after the decision above and never changes it:
+
+| Level | When | On the phone |
+|---|---|---|
+| `passive` | the source's policy has `passive: true` | Notification Center only: no banner, no sound, no screen wake |
+| `time-sensitive` | critical severity, or any camera alert | banner and sound, and breaks through Focus |
+| `active` | everything else | banner and sound |
+
+`passive` wins: a camera or a critical rule set to passive is passive. A
+passive push carries no `sound` but is still sent at APNs priority 10
+(priority 5 is throttled and may never arrive) and still has
+`mutable-content`, so the thumbnail is attached as usual. Quiet hours hold a
+passive push like any other; set `always_notify` as well to have overnight
+alerts waiting silently in the morning. Apple's `critical` level needs an
+entitlement Apple must approve, which the app does not have, so it is never
+sent. Each delivery is logged as `push sent` with its `level`.
 
 `POST /v1/rules/{name}/mute` and `DELETE` remain as aliases for sources that
 are Marshal rules; new clients should use `/v1/sources`.

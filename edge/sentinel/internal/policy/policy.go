@@ -106,10 +106,15 @@ func (d *Decider) SetQuietHours(ctx context.Context, q QuietHours) error {
 func KindMuteKey(kind string) string { return "kind:" + kind }
 
 // Decision explains a verdict; Reason is for logs and the test endpoint.
+// Passive is how a push that does go out is delivered (the source's policy);
+// it is never a reason to push or not.
 type Decision struct {
-	Push   bool
-	Reason string
+	Push    bool
+	Reason  string
+	Passive bool
 }
+
+func deny(reason string) Decision { return Decision{Reason: reason} }
 
 // Decide applies the ordered rules from the README: pushable event, mute
 // (source, then kind), object filter, quiet hours.
@@ -126,32 +131,32 @@ func (d *Decider) Decide(ctx context.Context, ev model.Event) Decision {
 	case ev.Created:
 	case a.Kind == model.KindSensor && ev.Type == "updated" && a.Status == model.StatusActive && a.RepeatCount > 0:
 		if pol.Repeats == "none" || (pol.Repeats == "critical" && a.Severity != model.SeverityCritical) {
-			return Decision{false, "repeat suppressed by policy " + pol.Repeats}
+			return deny("repeat suppressed by policy " + pol.Repeats)
 		}
 	default:
-		return Decision{false, "not a pushable event"}
+		return deny("not a pushable event")
 	}
 
 	// 2. muted? (the source itself, or its whole kind)
 	if muted, err := d.store.IsMuted(ctx, a.Rule, time.Now()); err == nil && muted {
-		return Decision{false, "source muted"}
+		return deny("source muted")
 	}
 	if muted, err := d.store.IsMuted(ctx, KindMuteKey(a.Kind), time.Now()); err == nil && muted {
-		return Decision{false, "kind muted"}
+		return deny("kind muted")
 	}
 
 	// 3. camera object filter
 	if a.Kind == model.KindCamera && len(pol.Objects) > 0 && a.Frigate != nil && len(a.Frigate.Objects) > 0 {
 		if !intersects(a.Frigate.Objects, pol.Objects) {
-			return Decision{false, "objects " + strings.Join(a.Frigate.Objects, ",") + " not in policy"}
+			return deny("objects " + strings.Join(a.Frigate.Objects, ",") + " not in policy")
 		}
 	}
 
 	// 4. quiet hours
 	if q, _ := d.QuietHours(ctx); q.ActiveAt(time.Now(), d.loc) && !pol.AlwaysNotify {
-		return Decision{false, "quiet hours"}
+		return deny("quiet hours")
 	}
-	return Decision{true, "ok"}
+	return Decision{Push: true, Reason: "ok", Passive: pol.Passive}
 }
 
 func intersects(a, b []string) bool {
@@ -170,7 +175,7 @@ func intersects(a, b []string) bool {
 // DecideBool adapts Decide to the push package's interface.
 type Adapter struct{ *Decider }
 
-func (a Adapter) Decide(ctx context.Context, ev model.Event) (bool, string) {
+func (a Adapter) Decide(ctx context.Context, ev model.Event) (push, passive bool, reason string) {
 	d := a.Decider.Decide(ctx, ev)
-	return d.Push, d.Reason
+	return d.Push, d.Passive, d.Reason
 }

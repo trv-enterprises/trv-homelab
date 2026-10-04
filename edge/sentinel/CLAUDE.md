@@ -73,6 +73,14 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   and an explicit value survives a later change of the YAML default.
   `rules.ParseActive` must accept exactly the words Marshal's `parseActive`
   does, or the app shows a switch position Marshal is not in.
+- **Passive is delivery, not decision.** `policy.passive` (0.6.0) rides on
+  `Decision.Passive` only when the answer is already "push"; the decider's
+  ordered rules do not read it. Do not make it bypass quiet hours:
+  `always_notify` is the one exemption, and the two combine. The level is
+  picked in `push.interruptionLevel`: passive, else time-sensitive for
+  critical/camera, else active, always set explicitly. Keep priority 10 and
+  `mutable-content` on passive pushes (see README). The `policies.passive`
+  column is added by `migrate()`, which now takes a table per entry.
 - **Commit, then push, then SSE.** A notification tap must never 404.
 - **Dashboard alerts are pulled from the dashboard, not re-sunk from ts-store.**
   A ts-store rule has exactly one sink; pointing rules at MQTT would take them

@@ -294,6 +294,7 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) {
 		Repeats      *string   `json:"repeats"`
 		Objects      *[]string `json:"objects"`
 		AlwaysNotify *bool     `json:"always_notify"`
+		Passive      *bool     `json:"passive"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
 		writeErr(w, http.StatusBadRequest, "bad json")
@@ -320,6 +321,9 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.AlwaysNotify != nil {
 		pol.AlwaysNotify = *body.AlwaysNotify
+	}
+	if body.Passive != nil {
+		pol.Passive = *body.Passive
 	}
 	if err := s.store.SetPolicy(r.Context(), id, pol); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

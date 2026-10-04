@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -228,5 +229,59 @@ func TestDashboardUpsertAndMigration(t *testing.T) {
 	s2.Close()
 	if _, err := Open(path); err != nil {
 		t.Fatalf("reopen: %v", err)
+	}
+}
+
+// A database written by 0.5.0 has a policies table without the passive
+// column. Opening it must add the column, keep the rows, and default them to
+// not passive.
+func TestPolicyPassiveAndMigrationFromOldSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	old, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`CREATE TABLE policies (
+		source TEXT PRIMARY KEY,
+		repeats TEXT NOT NULL DEFAULT 'critical',
+		objects TEXT NOT NULL DEFAULT '[]',
+		always_notify INTEGER NOT NULL DEFAULT 0
+	); INSERT INTO policies (source, repeats, objects, always_notify) VALUES ('frigate_driveway', 'none', '["person"]', 1);`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open 0.5.0 database: %v", err)
+	}
+	ctx := context.Background()
+	p, err := s.GetPolicy(ctx, "frigate_driveway")
+	if err != nil || p.Repeats != "none" || len(p.Objects) != 1 || !p.AlwaysNotify || p.Passive {
+		t.Fatalf("migrated row: %+v err=%v", p, err)
+	}
+	if d, _ := s.GetPolicy(ctx, "never_set"); d.Passive {
+		t.Fatalf("default policy is passive: %+v", d)
+	}
+	p.Passive = true
+	if err := s.SetPolicy(ctx, "frigate_driveway", p); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+
+	// Survives a reopen, and migrate() is a no-op the second time.
+	s, err = Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer s.Close()
+	p, _ = s.GetPolicy(ctx, "frigate_driveway")
+	if !p.Passive || !p.AlwaysNotify || p.Repeats != "none" {
+		t.Fatalf("after reopen: %+v", p)
+	}
+	p.Passive = false
+	_ = s.SetPolicy(ctx, "frigate_driveway", p)
+	if p, _ = s.GetPolicy(ctx, "frigate_driveway"); p.Passive {
+		t.Fatalf("passive did not clear: %+v", p)
 	}
 }

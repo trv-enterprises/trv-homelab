@@ -164,3 +164,45 @@ func TestPutActionRejections(t *testing.T) {
 		t.Errorf("nightlight_hall should still be active: %s", rec.Body)
 	}
 }
+
+func TestPolicyPassiveIsAPartialUpdate(t *testing.T) {
+	h := actionServer(t)
+	policy := func(rec *httptest.ResponseRecorder) (p struct {
+		Repeats      string `json:"repeats"`
+		AlwaysNotify bool   `json:"always_notify"`
+		Passive      *bool  `json:"passive"`
+	}) {
+		t.Helper()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body)
+		}
+		var src struct {
+			Policy json.RawMessage `json:"policy"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &src); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(src.Policy, &p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	// Always present in the response, false by default.
+	p := policy(call(t, h, http.MethodPut, "/v1/sources/nightlight_hall/policy", `{}`))
+	if p.Passive == nil || *p.Passive {
+		t.Fatalf("default: %+v", p)
+	}
+	p = policy(call(t, h, http.MethodPut, "/v1/sources/nightlight_hall/policy", `{"passive": true}`))
+	if p.Passive == nil || !*p.Passive || p.Repeats != "critical" || p.AlwaysNotify {
+		t.Fatalf("passive on: %+v", p)
+	}
+	// Changing another field leaves passive alone, and the reverse.
+	p = policy(call(t, h, http.MethodPut, "/v1/sources/nightlight_hall/policy", `{"always_notify": true}`))
+	if !*p.Passive || !p.AlwaysNotify {
+		t.Fatalf("passive lost on an unrelated update: %+v", p)
+	}
+	p = policy(call(t, h, http.MethodPut, "/v1/sources/nightlight_hall/policy", `{"passive": false}`))
+	if *p.Passive || !p.AlwaysNotify {
+		t.Fatalf("passive off: %+v", p)
+	}
+}

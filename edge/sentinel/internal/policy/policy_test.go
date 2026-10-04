@@ -101,3 +101,47 @@ func TestDecide(t *testing.T) {
 		t.Fatal("always_notify should bypass quiet hours")
 	}
 }
+
+// Passive is how a push is delivered, never whether: it must ride along with
+// a yes and change nothing about the decision itself.
+func TestDecidePassive(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "p.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	d := NewDecider(st, time.UTC)
+	motion := model.Alert{ID: "1", Kind: model.KindSensor, Rule: "nightlight_motion_hall", Severity: "info", Status: model.StatusActive}
+	ev := model.Event{Type: "created", Created: true, Alert: motion}
+
+	if dec := d.Decide(ctx, ev); !dec.Push || dec.Passive {
+		t.Fatalf("default should push actively: %+v", dec)
+	}
+	_ = st.SetPolicy(ctx, motion.Rule, store.Policy{Repeats: "critical", Passive: true})
+	if dec := d.Decide(ctx, ev); !dec.Push || !dec.Passive {
+		t.Fatalf("passive source should push passively: %+v", dec)
+	}
+	// Another source is unaffected.
+	other := motion
+	other.Rule = "garage"
+	if dec := d.Decide(ctx, model.Event{Type: "created", Created: true, Alert: other}); !dec.Push || dec.Passive {
+		t.Fatalf("passive leaked to another source: %+v", dec)
+	}
+
+	// Quiet hours still hold a passive push; Always notify is the exemption.
+	_ = d.SetQuietHours(ctx, QuietHours{Enabled: true, Start: "00:00", End: "23:59"})
+	if dec := d.Decide(ctx, ev); dec.Push || dec.Reason != "quiet hours" {
+		t.Fatalf("passive must not bypass quiet hours: %+v", dec)
+	}
+	_ = st.SetPolicy(ctx, motion.Rule, store.Policy{Repeats: "critical", Passive: true, AlwaysNotify: true})
+	if dec := d.Decide(ctx, ev); !dec.Push || !dec.Passive {
+		t.Fatalf("passive + always_notify should push passively in quiet hours: %+v", dec)
+	}
+
+	// A mute still suppresses it entirely.
+	_ = st.SetMute(ctx, motion.Rule, nil)
+	if dec := d.Decide(ctx, ev); dec.Push || dec.Reason != "source muted" {
+		t.Fatalf("muted passive source pushed: %+v", dec)
+	}
+}

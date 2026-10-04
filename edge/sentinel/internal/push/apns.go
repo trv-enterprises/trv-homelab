@@ -35,9 +35,10 @@ type DeviceStore interface {
 	DeleteDevice(ctx context.Context, token string) error
 }
 
-// Decider answers "should this event push?" (internal/policy).
+// Decider answers "should this event push?" and, when it does, whether the
+// source wants it delivered passively (internal/policy).
 type Decider interface {
-	Decide(ctx context.Context, ev model.Event) (push bool, reason string)
+	Decide(ctx context.Context, ev model.Event) (push, passive bool, reason string)
 }
 
 // LinkSigner mints the signed thumbnail URL embedded in the push so the
@@ -91,8 +92,10 @@ func (p *Pusher) Notify(ctx context.Context, ev model.Event) {
 		return
 	}
 	a := ev.Alert
+	passive := false
 	if p.decider != nil {
-		ok, reason := p.decider.Decide(ctx, ev)
+		ok, quiet, reason := p.decider.Decide(ctx, ev)
+		passive = quiet
 		if !ok {
 			if ev.Created || a.RepeatCount > 0 {
 				slog.Info("push suppressed", "alert", a.ID, "source", a.Rule, "reason", reason)
@@ -102,9 +105,10 @@ func (p *Pusher) Notify(ctx context.Context, ev model.Event) {
 	} else if !ev.Created {
 		return
 	}
-	for _, r := range p.SendAlert(ctx, a) {
+	level := interruptionLevel(a, passive)
+	for _, r := range p.SendAlert(ctx, a, passive) {
 		if r.Status == http.StatusOK {
-			slog.Info("push sent", "alert", a.ID, "env", r.Env, "apns_id", r.ApnsID)
+			slog.Info("push sent", "alert", a.ID, "source", a.Rule, "level", level, "env", r.Env, "apns_id", r.ApnsID)
 		} else {
 			slog.Warn("push failed", "alert", a.ID, "env", r.Env, "status", r.Status, "reason", r.Reason)
 		}
@@ -112,7 +116,7 @@ func (p *Pusher) Notify(ctx context.Context, ev model.Event) {
 }
 
 // SendAlert pushes a to all devices and prunes dead tokens.
-func (p *Pusher) SendAlert(ctx context.Context, a model.Alert) []Result {
+func (p *Pusher) SendAlert(ctx context.Context, a model.Alert, passive bool) []Result {
 	devs, err := p.devices.ListDevices(ctx)
 	if err != nil {
 		slog.Error("list devices", "error", err)
@@ -120,7 +124,7 @@ func (p *Pusher) SendAlert(ctx context.Context, a model.Alert) []Result {
 	}
 	var out []Result
 	for _, d := range devs {
-		out = append(out, p.send(ctx, d.Token, d.Env, p.build(a)))
+		out = append(out, p.send(ctx, d.Token, d.Env, p.build(a, passive)))
 	}
 	return out
 }
@@ -141,18 +145,38 @@ func (p *Pusher) SendTest(ctx context.Context, tok, env string) []Result {
 	return out
 }
 
-func (p *Pusher) build(a model.Alert) *payload.Payload {
+// interruptionLevel is what the push tells iOS about how to present it. A
+// source set to passive wins over everything: it is the user's choice for
+// that source, so a passive camera stays passive. Otherwise critical and
+// camera alerts are time-sensitive (they break through Focus) and the rest
+// are active. Apple's "critical" level needs an entitlement Apple must
+// approve; the app does not have it, so it is never sent.
+func interruptionLevel(a model.Alert, passive bool) payload.EInterruptionLevel {
+	switch {
+	case passive:
+		return payload.InterruptionLevelPassive
+	case a.Severity == model.SeverityCritical || a.Kind == model.KindCamera:
+		return payload.InterruptionLevelTimeSensitive
+	}
+	return payload.InterruptionLevelActive
+}
+
+func (p *Pusher) build(a model.Alert, passive bool) *payload.Payload {
 	pl := payload.NewPayload().
 		AlertTitle(a.Title).
 		AlertBody(a.Body).
-		Sound("default").
 		ThreadID(a.Rule).
 		MutableContent().
+		InterruptionLevel(interruptionLevel(a, passive)).
 		Custom("alert_id", a.ID).
 		Custom("kind", a.Kind).
 		Custom("severity", a.Severity)
-	if a.Severity == model.SeverityCritical || a.Kind == model.KindCamera {
-		pl = pl.InterruptionLevel(payload.InterruptionLevelTimeSensitive)
+	// A passive notification goes to Notification Center without a banner,
+	// a sound or waking the screen, so it carries no sound. It still goes
+	// at high priority: priority 5 is throttled and may never arrive, which
+	// defeats "it is there when I look".
+	if !passive {
+		pl = pl.Sound("default")
 	}
 	if a.Link != "" {
 		// The app registers a "dashboard" category with an "Open Dashboard"
