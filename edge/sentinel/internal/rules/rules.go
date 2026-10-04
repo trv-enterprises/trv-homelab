@@ -5,7 +5,9 @@
 package rules
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,10 +19,17 @@ type Rule struct {
 	Topic         string `json:"topic"`
 	Severity      string `json:"severity"`
 	RepeatMinutes int    `json:"repeat_minutes"`
-	HasAlert      bool   `json:"has_alert"`
-	HasAction     bool   `json:"has_action"`
-	EnableTopic   string `json:"enable_topic,omitempty"`
-	StateTopic    string `json:"state_topic,omitempty"`
+	// HasAlert is false for a rule whose alert block is switched off
+	// (alert.active: false, Marshal 0.5.0): Marshal never emits for it, so
+	// it is not a notification source.
+	HasAlert    bool   `json:"has_alert"`
+	HasAction   bool   `json:"has_action"`
+	EnableTopic string `json:"enable_topic,omitempty"`
+	StateTopic  string `json:"state_topic,omitempty"`
+	// ActiveTopic is the action's runtime switch (Marshal 0.5.0): a retained
+	// true/false there overrides ActiveDefault, the configured action.active.
+	ActiveTopic   string `json:"active_topic,omitempty"`
+	ActiveDefault bool   `json:"-"`
 }
 
 // file mirrors just the parts of Marshal's schema we read. Flat legacy
@@ -36,10 +45,13 @@ type file struct {
 		Alert         *struct {
 			Severity      string `yaml:"severity"`
 			RepeatMinutes int    `yaml:"repeat_minutes"`
+			Active        *bool  `yaml:"active"`
 		} `yaml:"alert"`
 		Action *struct {
 			EnableTopic string `yaml:"enable_topic"`
 			StateTopic  string `yaml:"state_topic"`
+			Active      *bool  `yaml:"active"`
+			ActiveTopic string `yaml:"active_topic"`
 		} `yaml:"action"`
 	} `yaml:"rules"`
 }
@@ -56,6 +68,9 @@ func Parse(b []byte) ([]Rule, error) {
 		rule.HasAlert = r.Alert != nil || r.Message != ""
 		if r.Alert != nil {
 			rule.Severity, rule.RepeatMinutes = r.Alert.Severity, r.Alert.RepeatMinutes
+			if r.Alert.Active != nil && !*r.Alert.Active {
+				rule.HasAlert = false
+			}
 		}
 		if rule.HasAlert && rule.Severity == "" {
 			rule.Severity = "warning" // Marshal's default
@@ -63,6 +78,8 @@ func Parse(b []byte) ([]Rule, error) {
 		if r.Action != nil {
 			rule.HasAction = true
 			rule.EnableTopic, rule.StateTopic = r.Action.EnableTopic, r.Action.StateTopic
+			rule.ActiveTopic = r.Action.ActiveTopic
+			rule.ActiveDefault = r.Action.Active == nil || *r.Action.Active
 		}
 		out = append(out, rule)
 	}
@@ -125,18 +142,51 @@ func (r *Reader) RepeatWindow(name string) time.Duration {
 	return 0
 }
 
-// StateTopics returns the distinct state_topic values across all rules.
-func (r *Reader) StateTopics() []string {
+// RetainedTopics returns the distinct state_topic and active_topic values
+// across all rules: the Marshal topics whose retained value sentinel mirrors.
+func (r *Reader) RetainedTopics() []string {
 	rules, _ := r.Rules()
 	seen := map[string]bool{}
 	var out []string
 	for _, rule := range rules {
-		if rule.StateTopic != "" && !seen[rule.StateTopic] {
-			seen[rule.StateTopic] = true
-			out = append(out, rule.StateTopic)
+		for _, t := range []string{rule.StateTopic, rule.ActiveTopic} {
+			if t != "" && !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
 		}
 	}
 	return out
+}
+
+// ParseActive reads an active_topic payload the way Marshal does: a bare
+// word (true/false, on/off, 1/0, enable(d)/disable(d), active/inactive) or a
+// JSON object {"active": <bool|word>}. ok is false for anything else, the
+// empty payload of a cleared retained value included, and the caller falls
+// back to the rule's configured default.
+func ParseActive(payload string) (active, ok bool) {
+	word := strings.TrimSpace(payload)
+	if strings.HasPrefix(word, "{") {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(word), &obj); err != nil {
+			return false, false
+		}
+		switch v := obj["active"].(type) {
+		case bool:
+			return v, true
+		case string:
+			word = v
+		default:
+			return false, false
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(word)) {
+	case "true", "on", "1", "enable", "enabled", "active":
+		return true, true
+	case "false", "off", "0", "disable", "disabled", "inactive":
+		return false, true
+	}
+	return false, false
 }
 
 // Find returns the rule with the given name.

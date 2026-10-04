@@ -40,7 +40,8 @@ All routes need `Authorization: Bearer <API_TOKEN>` except `/healthz`.
 | `GET /v1/devices`, `DELETE /v1/devices/{token}` | |
 | `POST /v1/push/test` `{token?, env?}` | send a test push |
 | `GET /v1/sources`, mute/policy, quiet hours | see **Notification sources** below |
-| `GET /v1/rules` | all Marshal rules from the mounted `rules.yaml`, with `muted`/`muted_until` and `owner` (Marshal's retained `state_topic`: automation/override/parked). Automations live here; notifications live under `/v1/sources` |
+| `PUT /v1/sources/{id}/action` `{active: bool}` | switch a source's Marshal action on or off; see **Rule actions** below |
+| `GET /v1/rules` | all Marshal rules from the mounted `rules.yaml`, with `muted`/`muted_until`, `owner` (Marshal's retained `state_topic`: automation/override/parked) and, for action rules, `active`. Automations live here; notifications live under `/v1/sources` |
 | `POST /v1/rules/{name}/mute` `{minutes: n\|null}` | suppress pushes for a rule (null = until unmuted); the rule still fires and is listed |
 | `DELETE /v1/rules/{name}/mute` | lift the mute |
 | `POST /v1/rules/{name}/enable` `{enabled: bool}` | publish to the rule's Marshal `enable_topic` (parks/resumes every rule sharing that topic); 409 for alert-only rules, which Marshal cannot park |
@@ -65,9 +66,11 @@ segment names).
 ## Notification sources (0.3.0 contract)
 
 The things that notify you are *sources*: every Marshal rule with an `alert:`
-block, and every Frigate camera. Action-only Marshal rules (the nightlights)
-are not sources and never appear here; parking them is a separate concern
-(see `/v1/rules/{name}/enable`) and the app does not offer it.
+block, and every Frigate camera. Action-only Marshal rules are not sources
+and never appear here, and neither does a rule whose alert is switched off in
+the config (`alert.active: false`, Marshal 0.5.0), because it never fires.
+Parking an automation is a separate concern (see `/v1/rules/{name}/enable`)
+and the app does not offer it.
 
 A source id is the alert's `rule` field: the Marshal rule name, or
 `frigate_<camera>` for a camera. Mutes and policies are keyed by that id.
@@ -129,6 +132,46 @@ regardless; policy only decides the push.
 
 `POST /v1/rules/{name}/mute` and `DELETE` remain as aliases for sources that
 are Marshal rules; new clients should use `/v1/sources`.
+
+## Rule actions (0.5.0)
+
+A Marshal rule can notify *and* act: the nightlights alert on motion and
+switch the light. Marshal 0.5.0 lets the action be switched off on its own
+("tell me about motion here, but leave the light alone"), and a source whose
+rule has an action reports it:
+
+```json
+{ "id": "nightlight_motion_hall", "kind": "sensor", "...": "...",
+  "action": { "active": true, "switchable": true, "owner": "automation" } }
+```
+
+- `active`: whether Marshal will start new cycles. It is the retained value
+  on the rule's `active_topic`, else the configured `action.active` (default
+  true), which is exactly how Marshal resolves it.
+- `switchable`: the rule has an `active_topic`. Without one only the config
+  can change `active`.
+- `owner`: Marshal's `state_topic` value (`automation`, `override`,
+  `parked`), absent until Marshal has published one. For context only: a
+  parked or overridden action does nothing whatever `active` says.
+
+`PUT /v1/sources/{id}/action` `{"active": true|false}` publishes `true` or
+`false` to the `active_topic`, retained, and returns the source. `404` for an
+unknown source, `409` when the rule has no `active_topic`, `502` when the
+publish fails (nothing is recorded in that case).
+
+Nothing is stored in sentinel. The retained message is the state, shared with
+Marshal and with anything else that publishes there (`mosquitto_pub -r`, a
+dashboard control), so sentinel mirrors it rather than owning it. Clearing the
+retained value (`mosquitto_pub -r -n -t <active_topic>`) hands the decision
+back to the config; the API has no call for that.
+
+Inactive is not parked, and not muted:
+
+| | stops pushes | stops the light | scope |
+|---|---|---|---|
+| mute (`/v1/sources/{id}/mute`) | yes | no | one source, or a kind |
+| inactive (`/v1/sources/{id}/action`) | no | new on-commands only; a running cycle finishes | one rule |
+| parked (`/v1/rules/{name}/enable`) | no | yes, and a light that is on stays on | every rule sharing the `enable_topic` |
 
 ## Dashboard alerts (0.4.0)
 

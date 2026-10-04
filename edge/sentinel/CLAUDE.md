@@ -35,8 +35,10 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   server-side mutes suppress.
 - **Notifications are controlled per *source*, not per rule.** A source is a
   Marshal rule with an `alert:` block or a Frigate camera, id = the alert's
-  `rule` field (`frigate_<camera>` for cameras). Action-only rules (the
-  nightlights) never notify and are not sources. `internal/policy.Decider`
+  `rule` field (`frigate_<camera>` for cameras). Action-only rules never
+  notify and are not sources; nor is a rule with `alert.active: false`. The
+  nightlights have had an `alert:` block since 2026-10, so they *are*
+  sources, each with an `action` block (below). `internal/policy.Decider`
   is the single push decision: pushable event → mute → camera object filter
   → quiet hours (server-local time, `TZ` in compose). Policies and quiet
   hours live in SQLite; cameras come from Frigate's `/api/config` (cached
@@ -59,6 +61,18 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   as `unparseable enable payload` once per rule sharing the topic. Harmless;
   the clean fix is for Marshal to ignore empty payloads silently (trv-marshal
   change, pending).
+- **Action active is mirrored, never stored.** Marshal 0.5.0's `active_topic`
+  holds a retained true/false that both services read; with nothing retained
+  both fall back to `action.active` in rules.yaml. Marshal reports it nowhere
+  (`state_topic` is ownership only), so there is no ack to wait for and no
+  table: `PUT /v1/sources/{id}/action` publishes retained and
+  `Engine.PublishRetained` records the value on the PUBACK, which is why the
+  response is right without the `time.Sleep` that enable needs. Publish
+  `true` retained too, do not clear it the way enable does: `SetActive` is a
+  no-op for a value Marshal already holds, so a replayed `true` is harmless,
+  and an explicit value survives a later change of the YAML default.
+  `rules.ParseActive` must accept exactly the words Marshal's `parseActive`
+  does, or the app shows a switch position Marshal is not in.
 - **Commit, then push, then SSE.** A notification tap must never 404.
 - **Dashboard alerts are pulled from the dashboard, not re-sunk from ts-store.**
   A ts-store rule has exactly one sink; pointing rules at MQTT would take them

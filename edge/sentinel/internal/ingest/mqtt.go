@@ -52,10 +52,11 @@ type Sink interface {
 	OnEvent(ev model.Event)
 }
 
-// StateTopics supplies the Marshal state_topic list to subscribe to (from
-// rules.yaml). Retained values are kept so /v1/rules can report the owner.
-type StateTopics interface {
-	StateTopics() []string
+// RetainedTopics supplies the Marshal topics to mirror (from rules.yaml):
+// every state_topic, so the owner can be reported, and every active_topic,
+// so a source can report whether its action is switched on.
+type RetainedTopics interface {
+	RetainedTopics() []string
 }
 
 type Engine struct {
@@ -63,10 +64,10 @@ type Engine struct {
 	clientID string
 	store    *store.Store
 	sink     Sink
-	states   StateTopics
+	states   RetainedTopics
 
 	stateMu sync.RWMutex
-	state   map[string]string // state_topic -> last retained payload
+	state   map[string]string // mirrored topic -> last retained payload
 
 	inbox chan inbound
 
@@ -82,17 +83,29 @@ type Engine struct {
 	}
 }
 
-func New(broker, clientID string, st *store.Store, sink Sink, states StateTopics) *Engine {
+func New(broker, clientID string, st *store.Store, sink Sink, states RetainedTopics) *Engine {
 	return &Engine{broker: broker, clientID: clientID, store: st, sink: sink, states: states,
 		state: map[string]string{}, inbox: make(chan inbound, inboxSize)}
 }
 
-// Owner returns the last retained payload seen on a Marshal state_topic
-// ("automation" | "override" | "parked"), or "" if none.
-func (e *Engine) Owner(stateTopic string) string {
+// Retained returns the last retained payload seen on a mirrored Marshal
+// topic, or "" if none: the owner ("automation" | "override" | "parked") for
+// a state_topic, the switch value for an active_topic.
+func (e *Engine) Retained(topic string) string {
 	e.stateMu.RLock()
 	defer e.stateMu.RUnlock()
-	return e.state[stateTopic]
+	return e.state[topic]
+}
+
+func (e *Engine) setRetained(topic, payload string) {
+	v := strings.TrimSpace(payload)
+	e.stateMu.Lock()
+	if v == "" {
+		delete(e.state, topic)
+	} else {
+		e.state[topic] = v
+	}
+	e.stateMu.Unlock()
 }
 
 // Run connects and blocks until ctx is done. It owns the dispatcher, the
@@ -172,15 +185,15 @@ func (e *Engine) subscribe(c mqtt.Client) error {
 	return e.subscribeStates(c)
 }
 
-// subscribeStates subscribes to every Marshal state_topic in rules.yaml.
-// Retained messages arrive immediately, so the owner map is warm right
-// after connect. Called on connect and periodically from the heartbeat so
-// rules added later are picked up without a restart.
+// subscribeStates subscribes to every Marshal state_topic and active_topic
+// in rules.yaml. Retained messages arrive immediately, so the mirror is warm
+// right after connect. Called on connect and periodically from the heartbeat
+// so rules added later are picked up without a restart.
 func (e *Engine) subscribeStates(c mqtt.Client) error {
 	if e.states == nil {
 		return nil
 	}
-	topics := e.states.StateTopics()
+	topics := e.states.RetainedTopics()
 	if len(topics) == 0 {
 		return nil
 	}
@@ -196,14 +209,7 @@ func (e *Engine) subscribeStates(c mqtt.Client) error {
 }
 
 func (e *Engine) onState(_ mqtt.Client, m mqtt.Message) {
-	v := strings.TrimSpace(string(m.Payload()))
-	e.stateMu.Lock()
-	if v == "" {
-		delete(e.state, m.Topic())
-	} else {
-		e.state[m.Topic()] = v
-	}
-	e.stateMu.Unlock()
+	e.setRetained(m.Topic(), string(m.Payload()))
 }
 
 // onMessage runs on paho's router goroutine: never block here. Copy the
@@ -394,6 +400,17 @@ func (e *Engine) Stats() Stats {
 func (e *Engine) Healthy() bool {
 	s := e.Stats()
 	return s.Connected && time.Since(s.LastSeen) < stallTimeout
+}
+
+// PublishRetained publishes a retained value at QoS 1 and records it in the
+// mirror, so a read straight after the call reflects it without waiting for
+// the broker to echo it back (or for the topic to be subscribed at all).
+func (e *Engine) PublishRetained(topic, payload string) error {
+	if err := e.Publish(topic, 1, true, payload); err != nil {
+		return err
+	}
+	e.setRetained(topic, payload)
+	return nil
 }
 
 // Publish sends a message (used by phase 3 for Marshal enable topics).

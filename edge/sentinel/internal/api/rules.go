@@ -13,12 +13,14 @@ import (
 // sentinel-side push suppression (any rule); "owner" is Marshal's retained
 // state_topic value for action rules (automation | override | parked),
 // which is what enable/disable changes. They are different things and the
-// app shows them separately.
+// app shows them separately. "active" (action rules only) is a third: whether
+// the action may start new cycles, see actionActive.
 type ruleView struct {
 	rules.Rule
 	Muted      bool       `json:"muted"`
 	MutedUntil *time.Time `json:"muted_until,omitempty"`
 	Owner      string     `json:"owner,omitempty"`
+	Active     *bool      `json:"active,omitempty"`
 }
 
 func (s *Server) view(r rules.Rule, mutes map[string]storeMute) ruleView {
@@ -27,9 +29,27 @@ func (s *Server) view(r rules.Rule, mutes map[string]storeMute) ruleView {
 		v.Muted, v.MutedUntil = true, m.Until
 	}
 	if r.StateTopic != "" {
-		v.Owner = s.engine.Owner(r.StateTopic)
+		v.Owner = s.engine.Retained(r.StateTopic)
+	}
+	if r.HasAction {
+		active := s.actionActive(r)
+		v.Active = &active
 	}
 	return v
+}
+
+// actionActive reports whether Marshal will start new cycles for the rule's
+// action, resolved the way Marshal resolves it: the retained value on the
+// rule's active_topic, else the configured default. Marshal does not report
+// this anywhere (state_topic is ownership only), so the retained value both
+// services read is the only truth there is.
+func (s *Server) actionActive(r rules.Rule) bool {
+	if r.ActiveTopic != "" {
+		if active, ok := rules.ParseActive(s.engine.Retained(r.ActiveTopic)); ok {
+			return active
+		}
+	}
+	return r.ActiveDefault
 }
 
 func (s *Server) listRules(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"sort"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/policy"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/rules"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/store"
 )
 
@@ -27,6 +29,31 @@ type source struct {
 	Muted         bool         `json:"muted"`
 	MutedUntil    *time.Time   `json:"muted_until"`
 	Policy        store.Policy `json:"policy"`
+	// Action is set for a sensor source whose rule also acts (the
+	// nightlights: motion both notifies and switches the light).
+	Action *sourceAction `json:"action,omitempty"`
+}
+
+// sourceAction is the Marshal action on a source's rule (0.5.0). Active is
+// whether it may start new cycles; Switchable is false for a rule with no
+// active_topic, where only the config can change it. Owner is Marshal's
+// state_topic value (automation | override | parked), reported for context:
+// a parked or overridden action does nothing whatever Active says.
+type sourceAction struct {
+	Active     bool   `json:"active"`
+	Switchable bool   `json:"switchable"`
+	Owner      string `json:"owner,omitempty"`
+}
+
+func (s *Server) sourceAction(r rules.Rule) *sourceAction {
+	if !r.HasAction {
+		return nil
+	}
+	a := &sourceAction{Active: s.actionActive(r), Switchable: r.ActiveTopic != ""}
+	if r.StateTopic != "" {
+		a.Owner = s.engine.Retained(r.StateTopic)
+	}
+	return a
 }
 
 // kindMute is the whole-kind mute state reported under "kind_mutes".
@@ -79,7 +106,7 @@ func (s *Server) sources(r *http.Request) ([]source, error) {
 			continue
 		}
 		out = append(out, source{ID: rule.Name, Kind: model.KindSensor, Name: humanize(rule.Name), Rule: rule.Name,
-			Severity: rule.Severity, RepeatMinutes: rule.RepeatMinutes})
+			Severity: rule.Severity, RepeatMinutes: rule.RepeatMinutes, Action: s.sourceAction(rule)})
 	}
 	cams, _ := s.cameras.Names(ctx)
 	seen := map[string]bool{}
@@ -296,6 +323,42 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.store.SetPolicy(r.Context(), id, pol); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.respondSource(w, r, id)
+}
+
+// PUT /v1/sources/{id}/action {"active": bool}
+//
+// Publishes to the rule's Marshal active_topic: "notify me, but leave the
+// light alone". Retained either way, unlike enable: Marshal treats the value
+// as state (a repeat of what it already holds is a no-op), and the broker
+// replaying it is how the setting survives a Marshal restart. It is not
+// parking: a cycle already running finishes and a manual override is kept.
+func (s *Server) putAction(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rule, ok := s.rules.Find(id)
+	if !ok || !rule.HasAlert {
+		writeErr(w, http.StatusNotFound, "no such source")
+		return
+	}
+	if rule.ActiveTopic == "" {
+		writeErr(w, http.StatusConflict, "rule has no active_topic; its action cannot be switched at runtime")
+		return
+	}
+	var body struct {
+		Active *bool `json:"active"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil || body.Active == nil {
+		writeErr(w, http.StatusBadRequest, `body must be {"active": true|false}`)
+		return
+	}
+	payload := "false"
+	if *body.Active {
+		payload = "true"
+	}
+	if err := s.engine.PublishRetained(rule.ActiveTopic, payload); err != nil {
+		writeErr(w, http.StatusBadGateway, fmt.Sprintf("publish to %s: %v", rule.ActiveTopic, err))
 		return
 	}
 	s.respondSource(w, r, id)
