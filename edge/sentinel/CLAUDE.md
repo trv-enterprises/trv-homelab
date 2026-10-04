@@ -109,6 +109,12 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
 - **Commit, then decide per person, then SSE.** A notification tap must never
   404 (`GET /v1/alerts/{id}` ignores history), and the hidden row must exist
   before the event is broadcast, because the stream filters on it.
+- **The history filter is a union, then a range.** `ListFilter.Kinds` and
+  `Sources` are OR-ed (a checked group plus individually checked sources is
+  how the app's two-level checklist is expressed); `From`/`To` then narrow
+  it by "was open at some point in the range", which is why a still-active
+  alert matches any range after it started. Timestamps are compared as the
+  RFC3339Nano strings they are stored as, like `since` and the cursor.
 - **Message order is not preserved** (`SetOrderMatters(false)`). A `new` and
   a `resolved` for one rule published in the same instant can be handled in
   either order. Marshal never does that; a synthetic burst in a test does.

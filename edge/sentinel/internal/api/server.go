@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -256,15 +257,36 @@ func (s *Server) decorator(ctx context.Context, who string) func(model.Alert) mo
 	}
 }
 
-// GET /v1/alerts?status=&kind=&source=&since=&cursor=&limit=&scope=
+// GET /v1/alerts?status=&kind=&source=&from=&to=&since=&cursor=&limit=&scope=
 //
-// scope is "mine" (the default: the asker's own history, without what was
-// muted or filtered out for them when it fired) or "all" (everything that
-// was recorded). When a full page comes back, next_cursor continues it.
+// kind and source each take several values (repeated, or comma-separated)
+// and are a union: alerts of any of those kinds, or from any of those
+// sources. from and to bound a time range the alert was open in. scope is
+// "mine" (the default: the asker's own history, without what was muted or
+// filtered out for them when it fired) or "all" (everything that was
+// recorded). When a full page comes back, next_cursor continues it.
 
 func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.ListFilter{Status: q.Get("status"), Kind: q.Get("kind"), Source: q.Get("source")}
+	f := store.ListFilter{Status: q.Get("status"), Kinds: multi(q, "kind"), Sources: multi(q, "source")}
+	if len(f.Kinds)+len(f.Sources) > maxListSelection {
+		writeErr(w, http.StatusBadRequest, "too many kinds and sources")
+		return
+	}
+	for name, dst := range map[string]*time.Time{"from": &f.From, "to": &f.To} {
+		if v := q.Get(name); v != "" {
+			t, err := time.Parse(time.RFC3339Nano, v)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, name+" must be RFC3339")
+				return
+			}
+			*dst = t
+		}
+	}
+	if !f.From.IsZero() && !f.To.IsZero() && f.To.Before(f.From) {
+		writeErr(w, http.StatusBadRequest, "to is before from")
+		return
+	}
 	switch q.Get("scope") {
 	case "", "mine":
 		f.VisibleTo = person(r)
@@ -349,6 +371,23 @@ func (s *Server) resolveAlert(w http.ResponseWriter, r *http.Request) {
 		}(a.Dashboard.AlertID)
 	}
 	writeJSON(w, http.StatusOK, s.decorator(r.Context(), person(r))(a))
+}
+
+// maxListSelection bounds how many kinds and sources one listing may name.
+const maxListSelection = 200
+
+// multi reads a query parameter that may be repeated and may hold several
+// comma-separated values. Source ids never contain a comma.
+func multi(q url.Values, key string) []string {
+	var out []string
+	for _, v := range q[key] {
+		for _, part := range strings.Split(v, ",") {
+			if part = strings.TrimSpace(part); part != "" {
+				out = append(out, part)
+			}
+		}
+	}
+	return out
 }
 
 // ---- devices ----------------------------------------------------------------

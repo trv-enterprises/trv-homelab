@@ -123,7 +123,7 @@ func (s *Server) sources(r *http.Request) ([]source, error) {
 		}
 	}
 	// cameras that alerted but are not (or no longer) in Frigate's config
-	if recent, err := s.store.List(ctx, store.ListFilter{Kind: model.KindCamera, Limit: 200}); err == nil {
+	if recent, err := s.store.List(ctx, store.ListFilter{Kinds: []string{model.KindCamera}, Limit: 200}); err == nil {
 		for _, a := range recent {
 			if a.Camera != "" && !seen[a.Camera] {
 				seen[a.Camera] = true

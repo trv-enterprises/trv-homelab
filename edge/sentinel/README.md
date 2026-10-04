@@ -32,7 +32,7 @@ says who is asking: see **People** below.
 
 | Route | Purpose |
 |---|---|
-| `GET /v1/alerts?status=&kind=&source=&since=&cursor=&limit=&scope=` | newest-updated first; see **History** below |
+| `GET /v1/alerts?status=&kind=&source=&from=&to=&since=&cursor=&limit=&scope=` | newest-updated first; see **History** below |
 | `GET /v1/me`, `PUT /v1/me` `{outpost_user_id}` | who the token belongs to, and their Outpost user; see **People** |
 | `GET /v1/alerts/{id}` | one alert, with signed media links for camera alerts |
 | `POST /v1/alerts/{id}/resolve` | human resolve |
@@ -105,13 +105,25 @@ phones receive the result.
 
 | Parameter | |
 |---|---|
-| `kind` | `sensor`, `camera` or `dashboard` |
-| `source` | one source id (the alert's `rule`): a Marshal rule, `frigate_<camera>`, `dashboard_<slug>` |
+| `kind` | `sensor`, `camera`, `dashboard`; several allowed (0.8.0) |
+| `source` | a source id (the alert's `rule`): a Marshal rule, `frigate_<camera>`, `dashboard_<slug>`; several allowed (0.8.0) |
+| `from`, `to` | RFC3339 bounds of a time range (0.8.0) |
 | `status` | `active`, `resolved`, `ended`, `stale` |
 | `since` | only alerts updated after this RFC3339 time |
 | `limit` | page size, default 100, at most 500 |
 | `cursor` | continue from a previous page's `next_cursor` |
 | `scope` | `mine` (default) or `all` |
+
+`kind` and `source` each take several values, repeated or comma-separated,
+and together they are a **union**: alerts of any of those kinds, or from any
+of those sources. `kind=camera&source=garage,hall` is every camera alert plus
+those two sensors. (Before 0.8.0 each took one value and the two narrowed
+each other.) At most 200 values in all.
+
+An alert is inside `from`..`to` when it was open at any point in the range:
+it started by `to`, and it was last updated at or after `from` or is still
+active. A door opened at 23:50 and closed at 00:20 is in both days. Either
+bound may be left out. The range narrows whatever `kind` and `source` select.
 
 A full page carries `next_cursor`; pass it back as `cursor` for the next one.
 It is opaque (the last alert's update time and id), so alerts updated in the

@@ -296,3 +296,96 @@ func TestOutpostUserIsPerPersonAndSignsTheirLinks(t *testing.T) {
 		t.Fatalf("after clearing: %s", got)
 	}
 }
+
+// The history filter: several groups and sources at once, as a union, and a
+// time range an alert was open in.
+func TestHistorySelectsSeveralSourcesAndATimeRange(t *testing.T) {
+	h, st := peopleServer(t)
+	ctx := context.Background()
+	base := time.Now().Add(-10 * time.Hour).Truncate(time.Second)
+	at := func(hours float64) time.Time { return base.Add(time.Duration(hours * float64(time.Hour))) }
+	stamp := func(tm time.Time) string { return tm.UTC().Format(time.RFC3339) }
+
+	hall := []model.Alert{seed(t, st, "nightlight_hall", at(0)), seed(t, st, "nightlight_hall", at(2)), seed(t, st, "nightlight_hall", at(4))}
+	garage := seed(t, st, "garage", at(1))
+	// Still open: started at +3h and never heard from again.
+	siren, _, err := st.UpsertSensor(ctx, store.SensorMsg{Rule: "siren", Severity: "critical", Message: "warm", At: at(3)}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dash, _, err := st.UpsertDashboard(ctx, store.DashboardMsg{ExternalID: "m1", SourceID: "dashboard_high-temp", RuleName: "High Temp",
+		Title: "High Temp", Severity: "warning", FiredAt: at(9)})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ids := func(query string) map[string]bool {
+		out := map[string]bool{}
+		for _, a := range decode[alertsResp](t, call(t, h, http.MethodGet, "/v1/alerts?"+query, "")).Alerts {
+			out[a.ID] = true
+		}
+		return out
+	}
+	want := func(name, query string, alerts ...model.Alert) {
+		t.Helper()
+		got := ids(query)
+		if len(got) != len(alerts) {
+			t.Errorf("%s: %d alerts, want %d (%s)", name, len(got), len(alerts), query)
+			return
+		}
+		for _, a := range alerts {
+			if !got[a.ID] {
+				t.Errorf("%s: missing %s %s", name, a.Rule, a.ID)
+			}
+		}
+	}
+	all := append(append([]model.Alert{}, hall...), garage, siren, dash)
+
+	want("no filter", "", all...)
+	want("two sources, comma", "source=garage,nightlight_hall", append(append([]model.Alert{}, hall...), garage)...)
+	want("two sources, repeated", "source=garage&source=nightlight_hall", append(append([]model.Alert{}, hall...), garage)...)
+	want("two groups", "kind=sensor,dashboard", all...)
+	want("one group", "kind=dashboard", dash)
+	// A whole group plus one source from another: the union, not the overlap.
+	want("group plus a source", "kind=dashboard&source=garage", dash, garage)
+	want("group that has nothing plus a source", "kind=camera&source=siren", siren)
+
+	// Time range. Each seeded alert is open for one second from its start.
+	want("a window around +2h", "from="+stamp(at(1.5))+"&to="+stamp(at(2.5)), hall[1])
+	// The siren started at +3h and is still open, so it is in every window
+	// from then on, even though nothing has been heard from it since.
+	want("a window after everything closed", "from="+stamp(at(5))+"&to="+stamp(at(6)), siren)
+	want("up to +1h", "to="+stamp(at(1)), hall[0], garage)
+	want("since +3.5h", "from="+stamp(at(3.5)), hall[2], siren, dash)
+	// The range and the selection narrow each other.
+	want("hall only, since +1.5h", "source=nightlight_hall&from="+stamp(at(1.5)), hall[1], hall[2])
+	want("window with a group plus a source", "kind=dashboard&source=garage&to="+stamp(at(8)), garage)
+
+	for name, q := range map[string]string{
+		"to before from": "from=" + stamp(at(5)) + "&to=" + stamp(at(4)),
+		"bad from":       "from=yesterday",
+		"bad to":         "to=2026-10-03",
+		"too many":       "source=" + strings.Repeat("x,", 250),
+	} {
+		if rec := call(t, h, http.MethodGet, "/v1/alerts?"+q, ""); rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status %d", name, rec.Code)
+		}
+	}
+	// Paging holds under a selection and a range together.
+	var seen int
+	cursor := ""
+	for page := 0; page < 10; page++ {
+		q := "limit=2&kind=dashboard&source=nightlight_hall,garage&from=" + stamp(at(-1))
+		if cursor != "" {
+			q += "&cursor=" + cursor
+		}
+		r := decode[alertsResp](t, call(t, h, http.MethodGet, "/v1/alerts?"+q, ""))
+		seen += len(r.Alerts)
+		if cursor = r.NextCursor; cursor == "" {
+			break
+		}
+	}
+	if seen != 5 {
+		t.Errorf("paged %d under a filter, want 5", seen)
+	}
+}

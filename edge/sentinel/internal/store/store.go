@@ -163,9 +163,19 @@ func (s *Store) Get(ctx context.Context, id string) (model.Alert, error) {
 // ListFilter narrows List. Zero values mean "no filter".
 type ListFilter struct {
 	Status string
-	Kind   string
-	Source string    // the alert's rule: a Marshal rule name, frigate_<camera>, dashboard_<slug>
-	Since  time.Time // updated_at > Since
+	// Kinds and Sources select what the alerts are about, as a union: an
+	// alert matches when its kind is one of Kinds OR its source (its rule: a
+	// Marshal rule name, frigate_<camera>, dashboard_<slug>) is one of
+	// Sources. That is how "every camera, plus these two sensors" is asked
+	// for. Both empty selects everything.
+	Kinds   []string
+	Sources []string
+	Since   time.Time // updated_at > Since
+	// From and To bound a time range. An alert is in it when it was open at
+	// any point in the range: it started by To, and it was last updated at
+	// or after From or is still active. A door opened at 23:50 and closed at
+	// 00:20 belongs to both days.
+	From, To time.Time
 	// VisibleTo leaves out alerts hidden from this person (see SetHidden).
 	// Empty lists everything.
 	VisibleTo string
@@ -221,13 +231,31 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]model.Alert, error) {
 		where = append(where, "status = ?")
 		args = append(args, f.Status)
 	}
-	if f.Kind != "" {
-		where = append(where, "kind = ?")
-		args = append(args, f.Kind)
+	var about []string
+	for _, sel := range []struct {
+		col    string
+		values []string
+	}{{"kind", f.Kinds}, {"rule", f.Sources}} {
+		if len(sel.values) == 0 {
+			continue
+		}
+		about = append(about, sel.col+" IN (?"+strings.Repeat(", ?", len(sel.values)-1)+")")
+		for _, v := range sel.values {
+			args = append(args, v)
+		}
 	}
-	if f.Source != "" {
-		where = append(where, "rule = ?")
-		args = append(args, f.Source)
+	if len(about) > 0 {
+		where = append(where, "("+strings.Join(about, " OR ")+")")
+	}
+	if !f.From.IsZero() {
+		// An alert that is still active has been open ever since it started,
+		// however long ago it was last heard from.
+		where = append(where, "(updated_at >= ? OR status = ?)")
+		args = append(args, fmtTime(f.From), model.StatusActive)
+	}
+	if !f.To.IsZero() {
+		where = append(where, "started_at <= ?")
+		args = append(args, fmtTime(f.To))
 	}
 	if !f.Since.IsZero() {
 		where = append(where, "updated_at > ?")
