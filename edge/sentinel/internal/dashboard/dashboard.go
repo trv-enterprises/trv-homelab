@@ -397,3 +397,21 @@ func (r *Runner) reconcile(ctx context.Context) {
 		}
 	}
 }
+
+// LinkFor returns link opened as a particular Outpost user: the user_id it
+// carries (the configured default, baked in when the alert was stored) is
+// replaced with userID. An empty userID, or a link that is not a URL, comes
+// back unchanged. The id signs the browser in: never log the result.
+func LinkFor(link, userID string) string {
+	if link == "" || userID == "" {
+		return link
+	}
+	u, err := url.Parse(link)
+	if err != nil {
+		return link
+	}
+	q := u.Query()
+	q.Set("user_id", userID)
+	u.RawQuery = q.Encode()
+	return u.String()
+}

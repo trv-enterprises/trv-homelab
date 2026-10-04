@@ -27,18 +27,20 @@ repeat window go `stale` (Marshal forgets state on restart and never sends
 
 ## API
 
-All routes need `Authorization: Bearer <API_TOKEN>` except `/healthz`.
+All routes need `Authorization: Bearer <token>` except `/healthz`. The token
+says who is asking: see **People** below.
 
 | Route | Purpose |
 |---|---|
-| `GET /v1/alerts?status=&kind=&since=&limit=` | newest-updated first |
+| `GET /v1/alerts?status=&kind=&source=&since=&cursor=&limit=&scope=` | newest-updated first; see **History** below |
+| `GET /v1/me`, `PUT /v1/me` `{outpost_user_id}` | who the token belongs to, and their Outpost user; see **People** |
 | `GET /v1/alerts/{id}` | one alert, with signed media links for camera alerts |
 | `POST /v1/alerts/{id}/resolve` | human resolve |
-| `GET /v1/events` | SSE stream of `created` / `updated` events |
+| `GET /v1/events` | SSE stream of `created` / `updated` events, the asker's own history only |
 | `GET /v1/media/...` | Frigate proxy; accepts a signed URL instead of the bearer |
-| `POST /v1/devices` `{token, env, name, app_version}` | register an APNs device token (upsert) |
+| `POST /v1/devices` `{token, env, name, app_version}` | register an APNs device token (upsert); the phone belongs to whoever registers it |
 | `GET /v1/devices`, `DELETE /v1/devices/{token}` | |
-| `POST /v1/push/test` `{token?, env?}` | send a test push |
+| `POST /v1/push/test` `{token?, env?}` | send a test push (to the asker's phones when no token is given) |
 | `GET /v1/sources`, mute/policy, quiet hours | see **Notification sources** below |
 | `PUT /v1/sources/{id}/action` `{active: bool}` | switch a source's Marshal action on or off; see **Rule actions** below |
 | `GET /v1/rules` | all Marshal rules from the mounted `rules.yaml`, with `muted`/`muted_until`, `owner` (Marshal's retained `state_topic`: automation/override/parked) and, for action rules, `active`. Automations live here; notifications live under `/v1/sources` |
@@ -62,6 +64,71 @@ never carries the token itself. A camera alert's `media` object carries:
 Playlists are rewritten on the way through so every segment line carries its
 own signed query (AVPlayer drops the playlist's query when resolving relative
 segment names).
+
+## People (0.7.0)
+
+Each person who runs the app has their own token, and the token is the only
+thing that says who is asking. There are no accounts and no sign-in.
+
+| What | Whose |
+|---|---|
+| Mutes (a source, or a whole kind), policy (`repeats`, `objects`, `always_notify`, `passive`), quiet hours | the person's own |
+| Which phones get a push, and how | the person's own: a phone belongs to whoever registered it |
+| History (see below), the Outpost user their dashboard links open as | the person's own |
+| The alerts themselves, resolving one, the sources that exist | shared |
+| A rule's action (`active_topic`) | shared: it is the house's, and lives on the broker |
+
+Configuration: `API_TOKEN` is the **owner's** token and `API_PERSON` their id
+(default `owner`). `API_PEOPLE` adds the others as comma-separated `id:token`.
+Ids are lowercase (`[a-z0-9_-]`); tokens are at least 16 characters and all
+different. The owner's token is also the key media links are signed with.
+
+On its first start 0.7.0 gives the owner everything the single-person server
+had: mutes, policies, quiet hours and every registered phone. That happens
+once (`settings.people_adopted` records for whom) and the old tables are left
+as they were, so rolling back to 0.6.0 finds its data unchanged. Anyone else
+starts from defaults. Pick the owner's id before that first start: renaming
+it later leaves the adopted settings under the old id.
+
+`GET /v1/me` returns `{id, name, outpost_user_id}`. `PUT /v1/me`
+`{"outpost_user_id": "<id>"}` sets the Outpost (dashboard) user that dashboard
+links open as for this person, in API responses, on the SSE stream and in
+their pushes. Empty clears it and the server's `DASHBOARD_LINK_USER_ID`
+applies. The id signs a browser in: it is stored but never logged.
+
+Every push decision below is made once per person, and only that person's
+phones receive the result.
+
+## History (0.7.0)
+
+`GET /v1/alerts` lists newest-updated first.
+
+| Parameter | |
+|---|---|
+| `kind` | `sensor`, `camera` or `dashboard` |
+| `source` | one source id (the alert's `rule`): a Marshal rule, `frigate_<camera>`, `dashboard_<slug>` |
+| `status` | `active`, `resolved`, `ended`, `stale` |
+| `since` | only alerts updated after this RFC3339 time |
+| `limit` | page size, default 100, at most 500 |
+| `cursor` | continue from a previous page's `next_cursor` |
+| `scope` | `mine` (default) or `all` |
+
+A full page carries `next_cursor`; pass it back as `cursor` for the next one.
+It is opaque (the last alert's update time and id), so alerts updated in the
+same instant are neither repeated nor skipped across a page boundary.
+
+`scope=mine` is the asker's own history: everything except alerts that were
+**hidden** from them when they fired. An alert is hidden from a person when
+its first sighting was something they had asked not to hear about, a muted
+source, a muted kind, or a camera review without one of their `objects`.
+Being held by quiet hours or by the repeat policy does not hide it, so the
+morning still shows what happened overnight. A mute set afterwards does not
+reach back, and an alert that later does reach the person (the mute ran out
+and a repeat pushed) becomes theirs again. `scope=all` is everything that was
+recorded. `GET /v1/alerts/{id}` ignores all of this: a tapped notification
+must never 404.
+
+Alerts from before 0.7.0 are in everyone's history.
 
 ## Notification sources (0.3.0 contract)
 
@@ -129,8 +196,9 @@ Push decision, in order, for every alert event:
 3. Camera `objects` filter fails? No push.
 4. Quiet hours active and not `always_notify`? No push.
 
-Nothing above changes what is *recorded*: every alert is stored and streamed
-regardless; policy only decides the push.
+Nothing above changes what is *recorded*: every alert is stored regardless.
+Since 0.7.0 step 2 and step 3 also keep the alert out of that person's own
+history and stream (see **History**); it stays in `scope=all`.
 
 ### Interruption level (0.6.0)
 
@@ -236,7 +304,9 @@ needed; the dashboard stays the system of record.
 | `MQTT_CLIENT_ID` | `sentinel` | fixed on purpose: persistent session |
 | `HTTP_ADDR` | `:8070` | |
 | `PUBLIC_BASE_URL` | `http://localhost:8070` | what the app reaches; used in signed links |
-| `API_TOKEN` | required | ≥16 chars |
+| `API_TOKEN` | required | ≥16 chars; the owner's token, and the media-signing key |
+| `API_PERSON` | `owner` | the owner's id |
+| `API_PEOPLE` | unset | more people, `id:token,id:token` |
 | `DB_PATH` | `/data/sentinel.db` | |
 | `RETENTION` | `720h` | |
 | `FRIGATE_URL` | `http://192.168.1.156:5000` | |
@@ -244,7 +314,7 @@ needed; the dashboard stays the system of record.
 | `APNS_KEY_B64`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID` | unset | all four required for push; otherwise the server runs with push disabled |
 | `DASHBOARD_URL`, `DASHBOARD_API_KEY` | unset | both required for the dashboard feed; otherwise it is off |
 | `DASHBOARD_PUBLIC_URL` | unset | base of the deep links the phone opens |
-| `DASHBOARD_LINK_USER_ID` | unset | appended to links as `user_id` |
+| `DASHBOARD_LINK_USER_ID` | unset | appended to links as `user_id`, for anyone who has not set their own with `PUT /v1/me` |
 | `DASHBOARD_MARK_SEEN` | `true` | app resolve → dashboard seen |
 
 ## Deploy

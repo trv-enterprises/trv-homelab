@@ -13,6 +13,14 @@ mqtt_broker: "tcp://mosquitto:1883"
 sentinel_http_port: 8070
 frigate_url: "http://192.168.1.156:5000"
 sentinel_retention: "720h"
+# People (0.7.0). The owner is whoever sentinel_api_token belongs to; on the
+# first start of 0.7.0 they adopt the mutes, policies, quiet hours and phones
+# the server already had, under this id. Choose it before that first deploy:
+# renaming it later leaves those settings under the old id.
+sentinel_owner: "owner"
+# Everyone else, id -> token (tokens from the vault), e.g.
+#   sentinel_people: { maria: "{{ sentinel_api_token_maria }}" }
+sentinel_people: {}
 # What the iOS app reaches. tailscale serve fronts 127.0.0.1:8070 with HTTPS.
 sentinel_public_base_url: "https://services.example.ts.net"
 sentinel_tailscale_serve: true

@@ -83,20 +83,22 @@ type quietView struct {
 }
 
 func (s *Server) quietView(r *http.Request) quietView {
-	q, _ := s.decider.QuietHours(r.Context())
+	q, _ := s.decider.QuietHours(r.Context(), person(r))
 	return quietView{QuietHours: q, Timezone: s.decider.Location().String(), ActiveNow: q.ActiveAt(time.Now(), s.decider.Location())}
 }
 
 // sources builds the list: alert rules from rules.yaml, cameras from
-// Frigate's config (falling back to cameras seen in stored alerts).
+// Frigate's config (falling back to cameras seen in stored alerts). The
+// sources are the same for everyone; the mute and policy on each are the
+// asker's own. The action block is not: it is the house's.
 func (s *Server) sources(r *http.Request) ([]source, error) {
 	ctx := r.Context()
 	rs, _ := s.rules.Rules()
-	mutes, err := s.store.Mutes(ctx, time.Now())
+	mutes, err := s.store.Mutes(ctx, person(r), time.Now())
 	if err != nil {
 		return nil, err
 	}
-	pols, err := s.store.Policies(ctx)
+	pols, err := s.store.Policies(ctx, person(r))
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +173,7 @@ func (s *Server) listSources(w http.ResponseWriter, r *http.Request) {
 	if all == nil {
 		all = []source{}
 	}
-	mutes, err := s.store.Mutes(r.Context(), time.Now())
+	mutes, err := s.store.Mutes(r.Context(), person(r), time.Now())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -218,7 +220,7 @@ func (s *Server) muteKind(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.store.SetMute(r.Context(), policy.KindMuteKey(kind), until); err != nil {
+	if err := s.store.SetMute(r.Context(), person(r), policy.KindMuteKey(kind), until); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -231,7 +233,7 @@ func (s *Server) unmuteKind(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such kind")
 		return
 	}
-	if err := s.store.ClearMute(r.Context(), policy.KindMuteKey(kind)); err != nil {
+	if err := s.store.ClearMute(r.Context(), person(r), policy.KindMuteKey(kind)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -239,7 +241,7 @@ func (s *Server) unmuteKind(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) respondKind(w http.ResponseWriter, r *http.Request, kind string) {
-	mutes, err := s.store.Mutes(r.Context(), time.Now())
+	mutes, err := s.store.Mutes(r.Context(), person(r), time.Now())
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -263,7 +265,7 @@ func (s *Server) muteSource(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.store.SetMute(r.Context(), id, until); err != nil {
+	if err := s.store.SetMute(r.Context(), person(r), id, until); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -272,7 +274,7 @@ func (s *Server) muteSource(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) unmuteSource(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if err := s.store.ClearMute(r.Context(), id); err != nil {
+	if err := s.store.ClearMute(r.Context(), person(r), id); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -300,7 +302,7 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	pol, _ := s.store.GetPolicy(r.Context(), id)
+	pol, _ := s.store.GetPolicy(r.Context(), person(r), id)
 	if body.Repeats != nil {
 		switch *body.Repeats {
 		case "none", "critical", "all":
@@ -325,7 +327,7 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) {
 	if body.Passive != nil {
 		pol.Passive = *body.Passive
 	}
-	if err := s.store.SetPolicy(r.Context(), id, pol); err != nil {
+	if err := s.store.SetPolicy(r.Context(), person(r), id, pol); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -396,7 +398,7 @@ func (s *Server) putQuietHours(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	q, _ := s.decider.QuietHours(r.Context())
+	q, _ := s.decider.QuietHours(r.Context(), person(r))
 	if body.Enabled != nil {
 		q.Enabled = *body.Enabled
 	}
@@ -406,7 +408,7 @@ func (s *Server) putQuietHours(w http.ResponseWriter, r *http.Request) {
 	if body.End != nil {
 		q.End = *body.End
 	}
-	if err := s.decider.SetQuietHours(r.Context(), q); err != nil {
+	if err := s.decider.SetQuietHours(r.Context(), person(r), q); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}

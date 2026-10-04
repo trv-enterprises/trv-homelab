@@ -35,12 +35,6 @@ type DeviceStore interface {
 	DeleteDevice(ctx context.Context, token string) error
 }
 
-// Decider answers "should this event push?" and, when it does, whether the
-// source wants it delivered passively (internal/policy).
-type Decider interface {
-	Decide(ctx context.Context, ev model.Event) (push, passive bool, reason string)
-}
-
 // LinkSigner mints the signed thumbnail URL embedded in the push so the
 // notification extension can attach an image without any credential.
 type LinkSigner interface {
@@ -52,12 +46,11 @@ type Pusher struct {
 	topic               string
 	devices             DeviceStore
 	links               LinkSigner
-	decider             Decider
 }
 
 // New builds a Pusher. A nil return with nil error means push is disabled
 // (no APNs config); callers should treat that as a no-op sender.
-func New(cfg Config, devices DeviceStore, links LinkSigner, decider Decider) (*Pusher, error) {
+func New(cfg Config, devices DeviceStore, links LinkSigner) (*Pusher, error) {
 	if len(cfg.Key) == 0 {
 		return nil, nil
 	}
@@ -72,7 +65,6 @@ func New(cfg Config, devices DeviceStore, links LinkSigner, decider Decider) (*P
 		topic:      cfg.BundleID,
 		devices:    devices,
 		links:      links,
-		decider:    decider,
 	}, nil
 }
 
@@ -85,38 +77,10 @@ type Result struct {
 	ApnsID string `json:"apns_id,omitempty"`
 }
 
-// Notify asks the policy layer whether the event pushes and, if so, sends
-// it to every registered device.
-func (p *Pusher) Notify(ctx context.Context, ev model.Event) {
-	if p == nil {
-		return
-	}
-	a := ev.Alert
-	passive := false
-	if p.decider != nil {
-		ok, quiet, reason := p.decider.Decide(ctx, ev)
-		passive = quiet
-		if !ok {
-			if ev.Created || a.RepeatCount > 0 {
-				slog.Info("push suppressed", "alert", a.ID, "source", a.Rule, "reason", reason)
-			}
-			return
-		}
-	} else if !ev.Created {
-		return
-	}
-	level := interruptionLevel(a, passive)
-	for _, r := range p.SendAlert(ctx, a, passive) {
-		if r.Status == http.StatusOK {
-			slog.Info("push sent", "alert", a.ID, "source", a.Rule, "level", level, "env", r.Env, "apns_id", r.ApnsID)
-		} else {
-			slog.Warn("push failed", "alert", a.ID, "env", r.Env, "status", r.Status, "reason", r.Reason)
-		}
-	}
-}
-
-// SendAlert pushes a to all devices and prunes dead tokens.
-func (p *Pusher) SendAlert(ctx context.Context, a model.Alert, passive bool) []Result {
+// SendAlert pushes a to one person's phones and prunes dead tokens. Whether
+// to push at all, and whether passively, was decided by the caller
+// (internal/notify); this package only delivers.
+func (p *Pusher) SendAlert(ctx context.Context, a model.Alert, person string, passive bool) []Result {
 	devs, err := p.devices.ListDevices(ctx)
 	if err != nil {
 		slog.Error("list devices", "error", err)
@@ -124,14 +88,16 @@ func (p *Pusher) SendAlert(ctx context.Context, a model.Alert, passive bool) []R
 	}
 	var out []Result
 	for _, d := range devs {
-		out = append(out, p.send(ctx, d.Token, d.Env, p.build(a, passive)))
+		if d.Person == person {
+			out = append(out, p.send(ctx, d.Token, d.Env, p.build(a, passive)))
+		}
 	}
 	return out
 }
 
-// SendTest pushes a canned notification to one token (or all devices when
-// tok is empty).
-func (p *Pusher) SendTest(ctx context.Context, tok, env string) []Result {
+// SendTest pushes a canned notification to one token, or to every phone of
+// person when tok is empty.
+func (p *Pusher) SendTest(ctx context.Context, tok, env, person string) []Result {
 	pl := payload.NewPayload().AlertTitle("Sentinel").AlertBody("Test push from the homelab").Sound("default").
 		Custom("kind", "test")
 	if tok != "" {
@@ -140,10 +106,15 @@ func (p *Pusher) SendTest(ctx context.Context, tok, env string) []Result {
 	devs, _ := p.devices.ListDevices(ctx)
 	var out []Result
 	for _, d := range devs {
-		out = append(out, p.send(ctx, d.Token, d.Env, pl))
+		if d.Person == person {
+			out = append(out, p.send(ctx, d.Token, d.Env, pl))
+		}
 	}
 	return out
 }
+
+// Level names the interruption level a push for a would carry, for logs.
+func Level(a model.Alert, passive bool) string { return string(interruptionLevel(a, passive)) }
 
 // interruptionLevel is what the push tells iOS about how to present it. A
 // source set to passive wins over everything: it is the user's choice for

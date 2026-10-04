@@ -90,7 +90,7 @@ func (s *Server) muteRule(w http.ResponseWriter, r *http.Request) {
 		t := time.Now().Add(time.Duration(*body.Minutes) * time.Minute)
 		until = &t
 	}
-	if err := s.store.SetMute(r.Context(), rule.Name, until); err != nil {
+	if err := s.store.SetMute(r.Context(), person(r), rule.Name, until); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -104,7 +104,7 @@ func (s *Server) unmuteRule(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such rule")
 		return
 	}
-	if err := s.store.ClearMute(r.Context(), rule.Name); err != nil {
+	if err := s.store.ClearMute(r.Context(), person(r), rule.Name); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -166,7 +166,7 @@ func (s *Server) respondRule(w http.ResponseWriter, r *http.Request, rule rules.
 type storeMute struct{ Until *time.Time }
 
 func (s *Server) mutes(r *http.Request) (map[string]storeMute, error) {
-	m, err := s.store.Mutes(r.Context(), time.Now())
+	m, err := s.store.Mutes(r.Context(), person(r), time.Now())
 	if err != nil {
 		return nil, err
 	}

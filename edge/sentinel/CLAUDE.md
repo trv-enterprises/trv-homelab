@@ -81,7 +81,37 @@ the trv-sentinel iOS app. Read `README.md` for the API and config.
   critical/camera, else active, always set explicitly. Keep priority 10 and
   `mutable-content` on passive pushes (see README). The `policies.passive`
   column is added by `migrate()`, which now takes a table per entry.
-- **Commit, then push, then SSE.** A notification tap must never 404.
+- **A person is a token.** `config.People`, owner first; `api.auth` puts the
+  id in the request context and every handler reads `person(r)`. Everything a
+  person chooses lives in `person_mutes` / `person_policies` /
+  `person_settings`, keyed by person; the pre-0.7.0 `mutes`, `policies` and
+  the `quiet_hours` row of `settings` are copied to the owner once by
+  `store.Adopt` and then never read or written, so a rollback finds them
+  intact. Do not start reading them again. What is shared is deliberate: the
+  alerts, resolving one, and a rule's action (the broker's retained value).
+- **`internal/notify` is the per-person loop; `push` only delivers.** For
+  each event and each person: `policy.Decider.Decide(ctx, person, ev)`, then
+  record history, then send to that person's phones with their passive flag
+  and their Outpost user in the link. It runs with a nil sender too, so
+  history is kept when APNs is not configured.
+- **History is recorded as "hidden", at the moment the alert fires.**
+  `hidden_alerts(alert_id, person)` gets a row when the first sighting was
+  hidden for that person (`Decision.Hidden`: source mute, kind mute, camera
+  object filter; never quiet hours or the repeat policy). No row means
+  visible, which is why pre-0.7.0 alerts are in everyone's history and why
+  `scope=all` is the same query without the `NOT EXISTS`. A later event that
+  pushes clears the row. Filtering by the *current* mutes instead would make
+  old alerts vanish during a one-hour mute and come back after it.
+- **The Outpost user is applied on the way out, not stored in the alert.**
+  `alerts.link` keeps the server default baked in at ingest;
+  `dashboard.LinkFor` swaps `user_id` per person in `Server.decorator`, on
+  the SSE stream and in `notify`. It signs a browser in: never log a link.
+- **Commit, then decide per person, then SSE.** A notification tap must never
+  404 (`GET /v1/alerts/{id}` ignores history), and the hidden row must exist
+  before the event is broadcast, because the stream filters on it.
+- **Message order is not preserved** (`SetOrderMatters(false)`). A `new` and
+  a `resolved` for one rule published in the same instant can be handled in
+  either order. Marshal never does that; a synthetic burst in a test does.
 - **Dashboard alerts are pulled from the dashboard, not re-sunk from ts-store.**
   A ts-store rule has exactly one sink; pointing rules at MQTT would take them
   away from the bell and lose the dashboard link metadata. The dashboard's

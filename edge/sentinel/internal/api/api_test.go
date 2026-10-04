@@ -155,7 +155,7 @@ func TestRoutesRegisterWithoutConflict(t *testing.T) {
 			t.Fatalf("route registration panicked: %v", r)
 		}
 	}()
-	s := New(Deps{Token: "0123456789abcdef", FrigateURL: "http://frigate.invalid"})
+	s := New(Deps{People: []model.Person{{ID: "tom", Token: "0123456789abcdef"}}, FrigateURL: "http://frigate.invalid"})
 	if s == nil || s.Handler() == nil {
 		t.Fatal("no server")
 	}

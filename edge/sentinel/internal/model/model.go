@@ -2,7 +2,10 @@
 // package. Keep it dependency-free: store, ingest, push and api all import it.
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Alert kinds.
 const (
@@ -89,6 +92,23 @@ type Device struct {
 	AppVersion string    `json:"app_version,omitempty"`
 	CreatedAt  time.Time `json:"created_at"`
 	LastSeen   time.Time `json:"last_seen"`
+	Person     string    `json:"person,omitempty"` // whose phone this is (0.7.0)
+}
+
+// Person is someone who runs the app. Their bearer token is how the server
+// knows who is asking; everything they choose (mutes, policy, quiet hours,
+// history) is keyed by ID.
+type Person struct {
+	ID    string
+	Token string
+}
+
+// Name is the display form of the id ("maria" -> "Maria").
+func (p Person) Name() string {
+	if p.ID == "" {
+		return ""
+	}
+	return strings.ToUpper(p.ID[:1]) + p.ID[1:]
 }
 
 // APNs environments.

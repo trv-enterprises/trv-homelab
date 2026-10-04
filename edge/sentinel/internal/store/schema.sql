@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE UNIQUE INDEX IF NOT EXISTS alerts_review_id ON alerts(review_id) WHERE review_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS alerts_rule_status ON alerts(kind, rule, status);
 CREATE INDEX IF NOT EXISTS alerts_updated_at ON alerts(updated_at);
+CREATE INDEX IF NOT EXISTS alerts_rule_updated ON alerts(rule, updated_at);
 
 CREATE TABLE IF NOT EXISTS devices (
     token       TEXT PRIMARY KEY,
@@ -40,7 +41,9 @@ CREATE TABLE IF NOT EXISTS devices (
     name        TEXT NOT NULL DEFAULT '',
     app_version TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
-    last_seen   TEXT NOT NULL
+    last_seen   TEXT NOT NULL,
+    -- 0.7.0: whose phone this is; added by migration on older files
+    person      TEXT NOT NULL DEFAULT ''
 );
 
 -- Phase 3: server-side mutes. Created now so the schema never needs a
@@ -59,8 +62,48 @@ CREATE TABLE IF NOT EXISTS policies (
     passive       INTEGER NOT NULL DEFAULT 0
 );
 
--- Small key/value settings (quiet hours).
+-- Small key/value settings (server-wide; the adoption marker).
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- 0.7.0: everything a person chooses is keyed by person. mutes, policies and
+-- the quiet-hours row in settings above are the single-person tables from
+-- before; Adopt copies them to the owner once and never touches them again,
+-- so a rollback finds them as they were.
+CREATE TABLE IF NOT EXISTS person_mutes (
+    person TEXT NOT NULL,
+    rule   TEXT NOT NULL,
+    until  TEXT,
+    PRIMARY KEY (person, rule)
+);
+
+CREATE TABLE IF NOT EXISTS person_policies (
+    person        TEXT NOT NULL,
+    source        TEXT NOT NULL,
+    repeats       TEXT NOT NULL DEFAULT 'critical',
+    objects       TEXT NOT NULL DEFAULT '[]',
+    always_notify INTEGER NOT NULL DEFAULT 0,
+    passive       INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (person, source)
+);
+
+-- Per-person key/value: quiet hours, the Outpost user id.
+CREATE TABLE IF NOT EXISTS person_settings (
+    person TEXT NOT NULL,
+    key    TEXT NOT NULL,
+    value  TEXT NOT NULL,
+    PRIMARY KEY (person, key)
+);
+
+-- An alert a person never sees in their own history: its source was muted
+-- for them, or filtered out, when it fired. No row means visible, which is
+-- why every alert from before 0.7.0 is visible to everyone.
+CREATE TABLE IF NOT EXISTS hidden_alerts (
+    alert_id TEXT NOT NULL,
+    person   TEXT NOT NULL,
+    reason   TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (alert_id, person)
+);
+CREATE INDEX IF NOT EXISTS hidden_alerts_person ON hidden_alerts(person);

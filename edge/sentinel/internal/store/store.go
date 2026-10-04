@@ -57,6 +57,7 @@ func migrate(db *sql.DB) error {
 		{"alerts", "store_name", `ALTER TABLE alerts ADD COLUMN store_name TEXT NOT NULL DEFAULT ''`},
 		{"alerts", "subtitle", `ALTER TABLE alerts ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''`},
 		{"policies", "passive", `ALTER TABLE policies ADD COLUMN passive INTEGER NOT NULL DEFAULT 0`},
+		{"devices", "person", `ALTER TABLE devices ADD COLUMN person TEXT NOT NULL DEFAULT ''`},
 	}
 	have := map[string]map[string]bool{}
 	for _, a := range adds {
@@ -163,9 +164,54 @@ func (s *Store) Get(ctx context.Context, id string) (model.Alert, error) {
 type ListFilter struct {
 	Status string
 	Kind   string
+	Source string    // the alert's rule: a Marshal rule name, frigate_<camera>, dashboard_<slug>
 	Since  time.Time // updated_at > Since
+	// VisibleTo leaves out alerts hidden from this person (see SetHidden).
+	// Empty lists everything.
+	VisibleTo string
+	// Before continues a listing: only alerts that sort after this cursor.
+	Before Cursor
 	Limit  int
 }
+
+// Cursor is a position in the newest-updated-first order. The id breaks
+// ties, so a page boundary that falls between two alerts updated in the same
+// instant neither repeats nor skips one.
+type Cursor struct {
+	UpdatedAt time.Time
+	ID        string
+}
+
+func (c Cursor) IsZero() bool { return c.UpdatedAt.IsZero() }
+
+// String is the opaque form handed to clients.
+func (c Cursor) String() string {
+	if c.IsZero() {
+		return ""
+	}
+	return fmtTime(c.UpdatedAt) + "|" + c.ID
+}
+
+// ParseCursor reads what String wrote.
+func ParseCursor(v string) (Cursor, error) {
+	ts, id, ok := strings.Cut(v, "|")
+	if !ok || id == "" {
+		return Cursor{}, fmt.Errorf("bad cursor")
+	}
+	t, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		return Cursor{}, fmt.Errorf("bad cursor")
+	}
+	return Cursor{UpdatedAt: t, ID: id}, nil
+}
+
+// CursorAfter is the cursor that continues a listing past a.
+func CursorAfter(a model.Alert) Cursor { return Cursor{UpdatedAt: a.UpdatedAt, ID: a.ID} }
+
+const (
+	defaultListLimit = 100
+	maxListLimit     = 500
+)
 
 // List returns alerts newest-updated first.
 func (s *Store) List(ctx context.Context, f ListFilter) ([]model.Alert, error) {
@@ -179,18 +225,31 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]model.Alert, error) {
 		where = append(where, "kind = ?")
 		args = append(args, f.Kind)
 	}
+	if f.Source != "" {
+		where = append(where, "rule = ?")
+		args = append(args, f.Source)
+	}
 	if !f.Since.IsZero() {
 		where = append(where, "updated_at > ?")
 		args = append(args, fmtTime(f.Since))
+	}
+	if !f.Before.IsZero() {
+		at := fmtTime(f.Before.UpdatedAt)
+		where = append(where, "(updated_at < ? OR (updated_at = ? AND id < ?))")
+		args = append(args, at, at, f.Before.ID)
+	}
+	if f.VisibleTo != "" {
+		where = append(where, "NOT EXISTS (SELECT 1 FROM hidden_alerts h WHERE h.alert_id = alerts.id AND h.person = ?)")
+		args = append(args, f.VisibleTo)
 	}
 	q := `SELECT ` + alertCols + ` FROM alerts`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
-	q += " ORDER BY updated_at DESC"
+	q += " ORDER BY updated_at DESC, id DESC"
 	limit := f.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 100
+	if limit <= 0 || limit > maxListLimit {
+		limit = defaultListLimit
 	}
 	q += fmt.Sprintf(" LIMIT %d", limit)
 
@@ -208,6 +267,37 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]model.Alert, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// ListLimit is the page size List uses for a requested limit.
+func ListLimit(requested int) int {
+	if requested <= 0 || requested > maxListLimit {
+		return defaultListLimit
+	}
+	return requested
+}
+
+// ---- per-person history ---------------------------------------------------
+
+// SetHidden records that an alert is not part of a person's own history.
+func (s *Store) SetHidden(ctx context.Context, alertID, person, reason string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO hidden_alerts (alert_id, person, reason) VALUES (?, ?, ?)
+		ON CONFLICT(alert_id, person) DO UPDATE SET reason = excluded.reason`, alertID, person, reason)
+	return err
+}
+
+// ClearHidden makes an alert part of a person's history again (it reached
+// them after all: a later repeat pushed).
+func (s *Store) ClearHidden(ctx context.Context, alertID, person string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM hidden_alerts WHERE alert_id = ? AND person = ?`, alertID, person)
+	return err
+}
+
+// IsHidden reports whether an alert is left out of a person's history.
+func (s *Store) IsHidden(ctx context.Context, alertID, person string) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM hidden_alerts WHERE alert_id = ? AND person = ?`, alertID, person).Scan(&n)
+	return n > 0, err
 }
 
 // SensorMsg is the normalized Marshal alert the ingest layer hands over.
@@ -441,6 +531,9 @@ func (s *Store) Prune(ctx context.Context, before time.Time) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM hidden_alerts WHERE alert_id NOT IN (SELECT id FROM alerts)`); err != nil {
+		return 0, err
+	}
 	return res.RowsAffected()
 }
 
@@ -448,16 +541,16 @@ func (s *Store) Prune(ctx context.Context, before time.Time) (int64, error) {
 
 func (s *Store) UpsertDevice(ctx context.Context, d model.Device) error {
 	now := fmtTime(time.Now())
-	_, err := s.db.ExecContext(ctx, `INSERT INTO devices (token, env, name, app_version, created_at, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO devices (token, env, name, app_version, created_at, last_seen, person)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(token) DO UPDATE SET env = excluded.env, name = excluded.name,
-			app_version = excluded.app_version, last_seen = excluded.last_seen`,
-		d.Token, d.Env, d.Name, d.AppVersion, now, now)
+			app_version = excluded.app_version, last_seen = excluded.last_seen, person = excluded.person`,
+		d.Token, d.Env, d.Name, d.AppVersion, now, now, d.Person)
 	return err
 }
 
 func (s *Store) ListDevices(ctx context.Context) ([]model.Device, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT token, env, name, app_version, created_at, last_seen FROM devices ORDER BY last_seen DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT token, env, name, app_version, created_at, last_seen, person FROM devices ORDER BY last_seen DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +559,7 @@ func (s *Store) ListDevices(ctx context.Context) ([]model.Device, error) {
 	for rows.Next() {
 		var d model.Device
 		var c, l string
-		if err := rows.Scan(&d.Token, &d.Env, &d.Name, &d.AppVersion, &c, &l); err != nil {
+		if err := rows.Scan(&d.Token, &d.Env, &d.Name, &d.AppVersion, &c, &l, &d.Person); err != nil {
 			return nil, err
 		}
 		d.CreatedAt, d.LastSeen = parseTime(c), parseTime(l)
@@ -482,9 +575,9 @@ func (s *Store) DeleteDevice(ctx context.Context, token string) error {
 
 // ---- mutes (phase 3 plumbing) -------------------------------------------
 
-func (s *Store) IsMuted(ctx context.Context, rule string, now time.Time) (bool, error) {
+func (s *Store) IsMuted(ctx context.Context, person, rule string, now time.Time) (bool, error) {
 	var until sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT until FROM mutes WHERE rule = ?`, rule).Scan(&until)
+	err := s.db.QueryRowContext(ctx, `SELECT until FROM person_mutes WHERE person = ? AND rule = ?`, person, rule).Scan(&until)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -544,20 +637,20 @@ func cameraBody(objects, zones []string) string {
 	return strings.Join(parts, " ")
 }
 
-// SetMute mutes a rule until `until` (nil = indefinitely).
-func (s *Store) SetMute(ctx context.Context, rule string, until *time.Time) error {
+// SetMute mutes a rule for a person until `until` (nil = indefinitely).
+func (s *Store) SetMute(ctx context.Context, person, rule string, until *time.Time) error {
 	var u any
 	if until != nil {
 		u = fmtTime(*until)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO mutes (rule, until) VALUES (?, ?)
-		ON CONFLICT(rule) DO UPDATE SET until = excluded.until`, rule, u)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO person_mutes (person, rule, until) VALUES (?, ?, ?)
+		ON CONFLICT(person, rule) DO UPDATE SET until = excluded.until`, person, rule, u)
 	return err
 }
 
-// ClearMute removes a rule's mute.
-func (s *Store) ClearMute(ctx context.Context, rule string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM mutes WHERE rule = ?`, rule)
+// ClearMute removes a person's mute of a rule.
+func (s *Store) ClearMute(ctx context.Context, person, rule string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM person_mutes WHERE person = ? AND rule = ?`, person, rule)
 	return err
 }
 
@@ -567,10 +660,10 @@ type Mute struct {
 	Until *time.Time // nil = indefinite
 }
 
-// Mutes returns every mute that is still in force at now. Expired rows are
-// deleted on the way through.
-func (s *Store) Mutes(ctx context.Context, now time.Time) (map[string]Mute, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT rule, until FROM mutes`)
+// Mutes returns every mute of a person's that is still in force at now.
+// Expired rows are deleted on the way through.
+func (s *Store) Mutes(ctx context.Context, person string, now time.Time) (map[string]Mute, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT rule, until FROM person_mutes WHERE person = ?`, person)
 	if err != nil {
 		return nil, err
 	}
@@ -596,7 +689,7 @@ func (s *Store) Mutes(ctx context.Context, now time.Time) (map[string]Mute, erro
 	}
 	rows.Close()
 	for _, r := range expired {
-		_, _ = s.db.ExecContext(ctx, `DELETE FROM mutes WHERE rule = ?`, r)
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM person_mutes WHERE person = ? AND rule = ?`, person, r)
 	}
 	return out, nil
 }
@@ -616,9 +709,9 @@ type Policy struct {
 
 func DefaultPolicy() Policy { return Policy{Repeats: "critical", Objects: []string{}} }
 
-// Policies returns every stored policy keyed by source id.
-func (s *Store) Policies(ctx context.Context) (map[string]Policy, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT source, repeats, objects, always_notify, passive FROM policies`)
+// Policies returns every policy a person has stored, keyed by source id.
+func (s *Store) Policies(ctx context.Context, person string) (map[string]Policy, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT source, repeats, objects, always_notify, passive FROM person_policies WHERE person = ?`, person)
 	if err != nil {
 		return nil, err
 	}
@@ -640,9 +733,9 @@ func (s *Store) Policies(ctx context.Context) (map[string]Policy, error) {
 	return out, rows.Err()
 }
 
-// GetPolicy returns the stored policy or the default.
-func (s *Store) GetPolicy(ctx context.Context, source string) (Policy, error) {
-	all, err := s.Policies(ctx)
+// GetPolicy returns a person's stored policy for a source, or the default.
+func (s *Store) GetPolicy(ctx context.Context, person, source string) (Policy, error) {
+	all, err := s.Policies(ctx, person)
 	if err != nil {
 		return DefaultPolicy(), err
 	}
@@ -652,8 +745,8 @@ func (s *Store) GetPolicy(ctx context.Context, source string) (Policy, error) {
 	return DefaultPolicy(), nil
 }
 
-// SetPolicy stores a full policy for a source.
-func (s *Store) SetPolicy(ctx context.Context, source string, p Policy) error {
+// SetPolicy stores a person's full policy for a source.
+func (s *Store) SetPolicy(ctx context.Context, person, source string, p Policy) error {
 	objs, _ := json.Marshal(nonNil(p.Objects))
 	always, passive := 0, 0
 	if p.AlwaysNotify {
@@ -662,10 +755,10 @@ func (s *Store) SetPolicy(ctx context.Context, source string, p Policy) error {
 	if p.Passive {
 		passive = 1
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO policies (source, repeats, objects, always_notify, passive) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(source) DO UPDATE SET repeats = excluded.repeats, objects = excluded.objects,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO person_policies (person, source, repeats, objects, always_notify, passive) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(person, source) DO UPDATE SET repeats = excluded.repeats, objects = excluded.objects,
 			always_notify = excluded.always_notify, passive = excluded.passive`,
-		source, p.Repeats, string(objs), always, passive)
+		person, source, p.Repeats, string(objs), always, passive)
 	return err
 }
 
@@ -682,6 +775,75 @@ func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
+}
+
+// GetPersonSetting reads one of a person's own settings.
+func (s *Store) GetPersonSetting(ctx context.Context, person, key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM person_settings WHERE person = ? AND key = ?`, person, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	return v, err == nil, err
+}
+
+// SetPersonSetting stores one of a person's own settings. An empty value
+// removes it.
+func (s *Store) SetPersonSetting(ctx context.Context, person, key, value string) error {
+	if value == "" {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM person_settings WHERE person = ? AND key = ?`, person, key)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO person_settings (person, key, value) VALUES (?, ?, ?)
+		ON CONFLICT(person, key) DO UPDATE SET value = excluded.value`, person, key, value)
+	return err
+}
+
+// ---- adoption (0.7.0) -----------------------------------------------------
+
+const adoptedKey = "people_adopted"
+
+// QuietHoursKey is the settings key quiet hours live under, both in the
+// single-person settings table from before 0.7.0 and per person since.
+const QuietHoursKey = "quiet_hours"
+
+// OutpostUserKey is the person setting holding their Outpost (dashboard)
+// user id, which dashboard links carry so the browser opens signed in as
+// them. Treat the value like a credential: never log it.
+const OutpostUserKey = "outpost_user_id"
+
+// Adopt hands everything the single-person server had to owner: the mutes,
+// the policies, quiet hours, and every registered phone. It runs once (the
+// marker in settings records for whom) and leaves the old tables alone, so a
+// rollback to an earlier version finds its data unchanged. Devices with no
+// person are claimed on every start, which is harmless: only a phone
+// registered by an older server can lack one.
+func (s *Store) Adopt(ctx context.Context, owner string) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE devices SET person = ? WHERE person = ''`, owner); err != nil {
+		return err
+	}
+	if _, done, err := s.GetSetting(ctx, adoptedKey); err != nil || done {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`INSERT OR IGNORE INTO person_mutes (person, rule, until) SELECT ?, rule, until FROM mutes`,
+		`INSERT OR IGNORE INTO person_policies (person, source, repeats, objects, always_notify, passive)
+			SELECT ?, source, repeats, objects, always_notify, passive FROM policies`,
+		`INSERT OR IGNORE INTO person_settings (person, key, value) SELECT ?, key, value FROM settings WHERE key = '` + QuietHoursKey + `'`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, owner); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO settings (key, value) VALUES (?, ?)`, adoptedKey, owner); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // ---- dashboard alerts (0.4.0) ---------------------------------------------

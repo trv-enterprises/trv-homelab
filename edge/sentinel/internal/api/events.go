@@ -17,16 +17,11 @@ type Hub struct {
 	mu      sync.Mutex
 	clients map[chan model.Event]struct{}
 	notify  func(model.Event)
-	decor   func(model.Alert) model.Alert
 }
 
 func NewHub(notify func(model.Event)) *Hub {
 	return &Hub{clients: map[chan model.Event]struct{}{}, notify: notify}
 }
-
-// SetDecorator installs the function that attaches signed media links
-// before an event is written to a client.
-func (h *Hub) SetDecorator(f func(model.Alert) model.Alert) { h.decor = f }
 
 // OnEvent implements ingest.Sink: push first (it is the point of the
 // system), then fan out.
@@ -74,7 +69,9 @@ func (h *Hub) Clients() int {
 }
 
 // events is GET /v1/events: a text/event-stream of created/updated alerts
-// plus a keepalive comment every 25s so proxies do not time it out.
+// plus a keepalive comment every 25s so proxies do not time it out. The
+// stream is the asker's own: an alert hidden from their history (decided
+// before the event is broadcast) is not streamed to them either.
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
@@ -88,6 +85,8 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, ": connected %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	fl.Flush()
 
+	who := person(r)
+	decorate := s.decorator(r.Context(), who)
 	c := s.hub.subscribe()
 	defer s.hub.unsubscribe(c)
 	ka := time.NewTicker(25 * time.Second)
@@ -103,7 +102,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
-			ev.Alert = s.decorate(ev.Alert)
+			if hidden, err := s.store.IsHidden(r.Context(), ev.Alert.ID, who); err == nil && hidden {
+				continue
+			}
+			ev.Alert = decorate(ev.Alert)
 			b, _ := json.Marshal(ev)
 			fmt.Fprintf(w, "event: %s\nid: %s\ndata: %s\n\n", ev.Type, ev.Alert.ID, b)
 			fl.Flush()

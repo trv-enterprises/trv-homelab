@@ -1,9 +1,10 @@
 // Package api is sentinel's HTTP surface: the JSON API the iOS app uses, an
 // SSE stream for the foreground app, and a media proxy to Frigate.
 //
-// Auth is a single bearer token. Media paths additionally accept a signed
-// URL (see media.go) because AVPlayer, AsyncImage and the notification
-// extension cannot reliably send headers.
+// Auth is a bearer token per person: the token is what says who is asking,
+// and everything a person chooses is theirs alone. Media paths additionally
+// accept a signed URL (see media.go) because AVPlayer, AsyncImage and the
+// notification extension cannot reliably send headers.
 package api
 
 import (
@@ -26,7 +27,7 @@ import (
 )
 
 type Server struct {
-	token   string
+	people  []model.Person
 	store   *store.Store
 	rules   *rules.Reader
 	pusher  *push.Pusher
@@ -42,7 +43,7 @@ type Server struct {
 }
 
 type Deps struct {
-	Token      string
+	People     []model.Person // the owner first
 	Store      *store.Store
 	Rules      *rules.Reader
 	Pusher     *push.Pusher
@@ -56,7 +57,7 @@ type Deps struct {
 }
 
 func New(d Deps) *Server {
-	s := &Server{token: d.Token, store: d.Store, rules: d.Rules, pusher: d.Pusher, engine: d.Engine,
+	s := &Server{people: d.People, store: d.Store, rules: d.Rules, pusher: d.Pusher, engine: d.Engine,
 		signer: d.Signer, hub: d.Hub, decider: d.Decider, cameras: d.Cameras, dash: d.Dashboard, mux: http.NewServeMux(), started: time.Now()}
 	s.proxy = newFrigateProxy(d.FrigateURL, d.Signer)
 
@@ -83,6 +84,8 @@ func New(d Deps) *Server {
 	s.mux.HandleFunc("DELETE /v1/sources/kind/{kind}/mute", s.unmuteKind)
 	s.mux.HandleFunc("GET /v1/settings/quiet-hours", s.getQuietHours)
 	s.mux.HandleFunc("PUT /v1/settings/quiet-hours", s.putQuietHours)
+	s.mux.HandleFunc("GET /v1/me", s.getMe)
+	s.mux.HandleFunc("PUT /v1/me", s.putMe)
 	return s
 }
 
@@ -97,8 +100,8 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if s.bearerOK(r) {
-			next.ServeHTTP(w, r)
+		if p, ok := s.bearer(r); ok {
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), personKey{}, p.ID)))
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/v1/media/") && s.signer.Verify(r.URL.Path, r.URL.Query()) {
@@ -110,14 +113,87 @@ func (s *Server) auth(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) bearerOK(r *http.Request) bool {
+// bearer returns the person whose token the request carries. Every token is
+// compared, in constant time, whether or not an earlier one matched.
+func (s *Server) bearer(r *http.Request) (model.Person, bool) {
 	h := r.Header.Get("Authorization")
-	const p = "Bearer "
-	if !strings.HasPrefix(h, p) {
-		return false
+	const prefix = "Bearer "
+	if !strings.HasPrefix(h, prefix) {
+		return model.Person{}, false
 	}
-	got := strings.TrimSpace(h[len(p):])
-	return subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1
+	got := []byte(strings.TrimSpace(h[len(prefix):]))
+	var who model.Person
+	found := false
+	for _, p := range s.people {
+		if subtle.ConstantTimeCompare(got, []byte(p.Token)) == 1 {
+			who, found = p, true
+		}
+	}
+	return who, found
+}
+
+type personKey struct{}
+
+// person is who is asking: set by auth for every bearer-authenticated
+// request. It is empty only for signed media requests, which no handler
+// below serves.
+func person(r *http.Request) string {
+	id, _ := r.Context().Value(personKey{}).(string)
+	return id
+}
+
+// ---- me ---------------------------------------------------------------------
+
+type meView struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	OutpostUserID string `json:"outpost_user_id"`
+}
+
+func (s *Server) me(r *http.Request) (meView, error) {
+	id := person(r)
+	v := meView{ID: id, Name: model.Person{ID: id}.Name()}
+	user, _, err := s.store.GetPersonSetting(r.Context(), id, store.OutpostUserKey)
+	v.OutpostUserID = user
+	return v, err
+}
+
+// GET /v1/me: who this token belongs to, and their Outpost user id.
+func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
+	v, err := s.me(r)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
+// PUT /v1/me {"outpost_user_id": "..."}
+//
+// The Outpost (dashboard) user that dashboard links open as for this person,
+// in the app and in their pushes. Empty clears it, falling back to the
+// server's DASHBOARD_LINK_USER_ID. It signs a browser in, so it is stored
+// but never logged.
+func (s *Server) putMe(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		OutpostUserID *string `json:"outpost_user_id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad json")
+		return
+	}
+	if body.OutpostUserID != nil {
+		user := strings.TrimSpace(*body.OutpostUserID)
+		if len(user) > 128 || strings.ContainsAny(user, " \t\r\n&?#/") {
+			writeErr(w, http.StatusBadRequest, "outpost_user_id is not a user id")
+			return
+		}
+		if err := s.store.SetPersonSetting(r.Context(), person(r), store.OutpostUserKey, user); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	s.getMe(w, r)
 }
 
 func logging(next http.Handler) http.Handler {
@@ -166,16 +242,45 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 // ---- alerts -----------------------------------------------------------------
 
-func (s *Server) decorate(a model.Alert) model.Alert {
-	if a.Kind == model.KindCamera {
-		a.Media = s.signer.MediaFor(a)
+// decorator returns the function that finishes an alert for one person on
+// its way out: signed media links for camera alerts, and the dashboard link
+// opened as that person's Outpost user.
+func (s *Server) decorator(ctx context.Context, who string) func(model.Alert) model.Alert {
+	user, _, _ := s.store.GetPersonSetting(ctx, who, store.OutpostUserKey)
+	return func(a model.Alert) model.Alert {
+		if a.Kind == model.KindCamera {
+			a.Media = s.signer.MediaFor(a)
+		}
+		a.Link = dashboard.LinkFor(a.Link, user)
+		return a
 	}
-	return a
 }
+
+// GET /v1/alerts?status=&kind=&source=&since=&cursor=&limit=&scope=
+//
+// scope is "mine" (the default: the asker's own history, without what was
+// muted or filtered out for them when it fired) or "all" (everything that
+// was recorded). When a full page comes back, next_cursor continues it.
 
 func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f := store.ListFilter{Status: q.Get("status"), Kind: q.Get("kind")}
+	f := store.ListFilter{Status: q.Get("status"), Kind: q.Get("kind"), Source: q.Get("source")}
+	switch q.Get("scope") {
+	case "", "mine":
+		f.VisibleTo = person(r)
+	case "all":
+	default:
+		writeErr(w, http.StatusBadRequest, "scope must be mine or all")
+		return
+	}
+	if v := q.Get("cursor"); v != "" {
+		c, err := store.ParseCursor(v)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "bad cursor")
+			return
+		}
+		f.Before = c
+	}
 	if v := q.Get("since"); v != "" {
 		t, err := time.Parse(time.RFC3339Nano, v)
 		if err != nil {
@@ -197,10 +302,15 @@ func (s *Server) listAlerts(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	decorate := s.decorator(r.Context(), person(r))
 	for i := range alerts {
-		alerts[i] = s.decorate(alerts[i])
+		alerts[i] = decorate(alerts[i])
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"alerts": alerts, "server_time": time.Now().UTC()})
+	resp := map[string]any{"alerts": alerts, "server_time": time.Now().UTC()}
+	if len(alerts) > 0 && len(alerts) == store.ListLimit(f.Limit) {
+		resp["next_cursor"] = store.CursorAfter(alerts[len(alerts)-1]).String()
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) getAlert(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +323,7 @@ func (s *Server) getAlert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.decorate(a))
+	writeJSON(w, http.StatusOK, s.decorator(r.Context(), person(r))(a))
 }
 
 func (s *Server) resolveAlert(w http.ResponseWriter, r *http.Request) {
@@ -238,7 +348,7 @@ func (s *Server) resolveAlert(w http.ResponseWriter, r *http.Request) {
 			}
 		}(a.Dashboard.AlertID)
 	}
-	writeJSON(w, http.StatusOK, s.decorate(a))
+	writeJSON(w, http.StatusOK, s.decorator(r.Context(), person(r))(a))
 }
 
 // ---- devices ----------------------------------------------------------------
@@ -262,11 +372,14 @@ func (s *Server) registerDevice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "env must be sandbox or production")
 		return
 	}
+	// The phone belongs to whoever registered it; registering again with
+	// another person's token moves it.
+	d.Person = person(r)
 	if err := s.store.UpsertDevice(r.Context(), d); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	slog.Info("device registered", "env", d.Env, "name", d.Name)
+	slog.Info("device registered", "person", d.Person, "env", d.Env, "name", d.Name)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -304,7 +417,7 @@ func (s *Server) testPush(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	writeJSON(w, http.StatusOK, map[string]any{"results": s.pusher.SendTest(ctx, strings.ToLower(body.Token), body.Env)})
+	writeJSON(w, http.StatusOK, map[string]any{"results": s.pusher.SendTest(ctx, strings.ToLower(body.Token), body.Env, person(r))})
 }
 
 // ---- helpers ----------------------------------------------------------------

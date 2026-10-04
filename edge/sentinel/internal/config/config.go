@@ -7,8 +7,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
+
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
 )
 
 type Config struct {
@@ -17,7 +20,11 @@ type Config struct {
 
 	HTTPAddr      string
 	PublicBaseURL string // scheme+host the app reaches us at; used in signed media links
-	APIToken      string
+	APIToken      string // the owner's token; also the key media links are signed with
+	// People is everyone who may use the API, the owner first. The owner is
+	// whoever API_TOKEN belongs to, and adopts the data of a server that had
+	// no people yet.
+	People []model.Person
 
 	DBPath    string
 	Retention time.Duration
@@ -65,6 +72,12 @@ func Load() (Config, error) {
 		return c, fmt.Errorf("API_TOKEN is too short (min 16 chars)")
 	}
 
+	people, err := parsePeople(env("API_PERSON", "owner"), c.APIToken, os.Getenv("API_PEOPLE"))
+	if err != nil {
+		return c, err
+	}
+	c.People = people
+
 	ret, err := time.ParseDuration(env("RETENTION", "720h"))
 	if err != nil {
 		return c, fmt.Errorf("RETENTION: %w", err)
@@ -81,6 +94,41 @@ func Load() (Config, error) {
 		c.APNSKey = key
 	}
 	return c, nil
+}
+
+var personID = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+// parsePeople builds the people list: the owner (API_PERSON, holding
+// API_TOKEN) followed by API_PEOPLE, a comma-separated list of id:token.
+// Ids are lowercase names; tokens must be distinct, because the token is the
+// only thing that says who is asking.
+func parsePeople(owner, ownerToken, extra string) ([]model.Person, error) {
+	people := []model.Person{{ID: strings.TrimSpace(owner), Token: ownerToken}}
+	for _, pair := range strings.Split(extra, ",") {
+		if pair = strings.TrimSpace(pair); pair == "" {
+			continue
+		}
+		id, tok, ok := strings.Cut(pair, ":")
+		if !ok {
+			return nil, fmt.Errorf("API_PEOPLE: want id:token pairs separated by commas")
+		}
+		people = append(people, model.Person{ID: strings.TrimSpace(id), Token: strings.TrimSpace(tok)})
+	}
+	ids, tokens := map[string]bool{}, map[string]bool{}
+	for _, p := range people {
+		switch {
+		case !personID.MatchString(p.ID):
+			return nil, fmt.Errorf("person id %q: use lowercase letters, digits, - and _", p.ID)
+		case len(p.Token) < 16:
+			return nil, fmt.Errorf("token for %s is too short (min 16 chars)", p.ID)
+		case ids[p.ID]:
+			return nil, fmt.Errorf("person id %s is used twice", p.ID)
+		case tokens[p.Token]:
+			return nil, fmt.Errorf("%s has the same token as someone else", p.ID)
+		}
+		ids[p.ID], tokens[p.Token] = true, true
+	}
+	return people, nil
 }
 
 // DashboardEnabled reports whether the dashboard feed is configured.

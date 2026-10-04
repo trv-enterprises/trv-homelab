@@ -12,12 +12,18 @@ import (
 
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/policy"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/rules"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/store"
 )
 
-const testToken = "0123456789abcdef"
+const (
+	testToken  = "0123456789abcdef"
+	mariaToken = "fedcba9876543210"
+)
+
+var testPeople = []model.Person{{ID: "tom", Token: testToken}, {ID: "maria", Token: mariaToken}}
 
 const actionRules = `
 rules:
@@ -54,6 +60,13 @@ rules:
 // actionServer is a server over a real store and rules file, with an MQTT
 // engine that was never connected: enough for everything short of a publish.
 func actionServer(t *testing.T) http.Handler {
+	h, _ := peopleServer(t)
+	return h
+}
+
+// peopleServer is actionServer plus its store, for tests that need alerts.
+// Two people can sign in: tom (the owner, testToken) and maria.
+func peopleServer(t *testing.T) (http.Handler, *store.Store) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "rules.yaml")
@@ -71,17 +84,24 @@ func actionServer(t *testing.T) http.Handler {
 	t.Cleanup(fr.Close)
 	reader := rules.NewReader(path, time.Minute)
 	return New(Deps{
-		Token: testToken, Store: st, Rules: reader,
+		People: testPeople, Store: st, Rules: reader,
 		Engine:  ingest.New("tcp://127.0.0.1:1", "test", st, nil, reader),
 		Decider: policy.NewDecider(st, time.UTC),
+		Signer:  NewSigner("https://sentinel.example", testToken, time.Minute),
+		Hub:     NewHub(nil),
 		Cameras: frigate.NewCameras(fr.URL, time.Minute), FrigateURL: fr.URL,
-	}).Handler()
+	}).Handler(), st
 }
 
 func call(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return callAs(t, h, testToken, method, path, body)
+}
+
+func callAs(t *testing.T, h http.Handler, token, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+testToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec

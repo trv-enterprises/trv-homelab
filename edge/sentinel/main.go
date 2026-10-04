@@ -21,6 +21,7 @@ import (
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/frigate"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/ingest"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/model"
+	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/notify"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/policy"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/push"
 	"github.com/trv-enterprises/trv-homelab/edge/sentinel/internal/rules"
@@ -49,20 +50,35 @@ func main() {
 	}
 	defer st.Close()
 
+	owner := cfg.People[0]
+	if err := st.Adopt(context.Background(), owner.ID); err != nil {
+		slog.Error("adopt existing settings", "owner", owner.ID, "error", err)
+		os.Exit(1)
+	}
+	ids := make([]string, len(cfg.People))
+	for i, p := range cfg.People {
+		ids[i] = p.ID
+	}
+	slog.Info("people", "owner", owner.ID, "all", ids)
+
 	rulesReader := rules.NewReader(cfg.RulesPath, 5*time.Minute)
 	signer := api.NewSigner(cfg.PublicBaseURL, cfg.APIToken, mediaLinkTTL)
 
 	decider := policy.NewDecider(st, time.Local)
 	cameras := frigate.NewCameras(cfg.FrigateURL, 10*time.Minute)
 
-	pusher, err := push.New(push.Config{Key: cfg.APNSKey, KeyID: cfg.APNSKeyID, TeamID: cfg.APNSTeamID, BundleID: cfg.APNSBundleID}, st, signer, policy.Adapter{Decider: decider})
+	pusher, err := push.New(push.Config{Key: cfg.APNSKey, KeyID: cfg.APNSKeyID, TeamID: cfg.APNSTeamID, BundleID: cfg.APNSBundleID}, st, signer)
 	if err != nil {
 		slog.Error("apns", "error", err)
 		os.Exit(1)
 	}
+	var sender notify.Sender
 	if pusher == nil {
 		slog.Warn("push disabled: APNS_* not fully configured")
+	} else {
+		sender = pusher
 	}
+	notifier := notify.New(cfg.People, decider, st, sender)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -70,7 +86,7 @@ func main() {
 	hub := api.NewHub(func(ev model.Event) {
 		pctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		pusher.Notify(pctx, ev)
+		notifier.OnEvent(pctx, ev)
 	})
 
 	engine := ingest.New(cfg.MQTTBroker, cfg.MQTTClientID, st, hub, rulesReader)
@@ -88,7 +104,7 @@ func main() {
 	}
 
 	srv := api.New(api.Deps{
-		Token: cfg.APIToken, Store: st, Rules: rulesReader, Pusher: pusher, Engine: engine,
+		People: cfg.People, Store: st, Rules: rulesReader, Pusher: pusher, Engine: engine,
 		Signer: signer, Hub: hub, Decider: decider, Cameras: cameras, Dashboard: dash, FrigateURL: cfg.FrigateURL,
 	})
 	httpSrv := &http.Server{
