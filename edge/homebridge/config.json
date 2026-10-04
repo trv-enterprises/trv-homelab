@@ -240,6 +240,118 @@
         },
         {
             "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Kitchen Dining Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-kitchen-dining",
+                "setOn": "zigbee2mqtt/night-light-kitchen-dining/set",
+                "getBrightness": "zigbee2mqtt/night-light-kitchen-dining",
+                "setBrightness": "zigbee2mqtt/night-light-kitchen-dining/set",
+                "getHue": "zigbee2mqtt/night-light-kitchen-dining",
+                "setHue": "zigbee2mqtt/night-light-kitchen-dining/set",
+                "getSaturation": "zigbee2mqtt/night-light-kitchen-dining",
+                "setSaturation": "zigbee2mqtt/night-light-kitchen-dining/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Kitchen Dining Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-kitchen-dining"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Main Bedroom Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-main-bedroom",
+                "setOn": "zigbee2mqtt/night-light-main-bedroom/set",
+                "getBrightness": "zigbee2mqtt/night-light-main-bedroom",
+                "setBrightness": "zigbee2mqtt/night-light-main-bedroom/set",
+                "getHue": "zigbee2mqtt/night-light-main-bedroom",
+                "setHue": "zigbee2mqtt/night-light-main-bedroom/set",
+                "getSaturation": "zigbee2mqtt/night-light-main-bedroom",
+                "setSaturation": "zigbee2mqtt/night-light-main-bedroom/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Main Bedroom Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-main-bedroom"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Guest Bedroom Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-guest-bedroom",
+                "setOn": "zigbee2mqtt/night-light-guest-bedroom/set",
+                "getBrightness": "zigbee2mqtt/night-light-guest-bedroom",
+                "setBrightness": "zigbee2mqtt/night-light-guest-bedroom/set",
+                "getHue": "zigbee2mqtt/night-light-guest-bedroom",
+                "setHue": "zigbee2mqtt/night-light-guest-bedroom/set",
+                "getSaturation": "zigbee2mqtt/night-light-guest-bedroom",
+                "setSaturation": "zigbee2mqtt/night-light-guest-bedroom/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Guest Bedroom Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-guest-bedroom"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "lightbulb",
+            "name": "Maria's Office Nightlight",
+            "url": "mqtt://localhost:1883",
+            "topics": {
+                "getOn": "zigbee2mqtt/night-light-maria-office",
+                "setOn": "zigbee2mqtt/night-light-maria-office/set",
+                "getBrightness": "zigbee2mqtt/night-light-maria-office",
+                "setBrightness": "zigbee2mqtt/night-light-maria-office/set",
+                "getHue": "zigbee2mqtt/night-light-maria-office",
+                "setHue": "zigbee2mqtt/night-light-maria-office/set",
+                "getSaturation": "zigbee2mqtt/night-light-maria-office",
+                "setSaturation": "zigbee2mqtt/night-light-maria-office/set"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Maria's Office Nightlight Motion",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/night-light-maria-office"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
             "type": "switch",
             "name": "Nightlight Auto",
             "url": "mqtt://localhost:1883",
