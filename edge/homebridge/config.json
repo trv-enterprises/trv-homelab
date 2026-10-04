@@ -113,7 +113,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-kitchen",
                 "setSaturation": "zigbee2mqtt/night-light-kitchen/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -141,7 +142,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-utility-room",
                 "setSaturation": "zigbee2mqtt/night-light-utility-room/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -169,7 +171,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-media-room",
                 "setSaturation": "zigbee2mqtt/night-light-media-room/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -197,7 +200,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-dining-room",
                 "setSaturation": "zigbee2mqtt/night-light-dining-room/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -225,7 +229,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-hall",
                 "setSaturation": "zigbee2mqtt/night-light-hall/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -253,7 +258,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-kitchen-dining",
                 "setSaturation": "zigbee2mqtt/night-light-kitchen-dining/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -281,7 +287,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-main-bedroom",
                 "setSaturation": "zigbee2mqtt/night-light-main-bedroom/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -309,7 +316,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-guest-bedroom",
                 "setSaturation": "zigbee2mqtt/night-light-guest-bedroom/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",
@@ -337,7 +345,8 @@
                 "getSaturation": "zigbee2mqtt/night-light-maria-office",
                 "setSaturation": "zigbee2mqtt/night-light-maria-office/set"
             },
-            "codec": "z2m-codec.js"
+            "codec": "z2m-codec.js",
+            "adaptiveLighting": false
         },
         {
             "accessory": "mqttthing",

@@ -15,6 +15,16 @@
 # They stay on the host, so this public repo holds no secrets and no one can
 # overwrite a live config with a half-populated copy.
 #
+# Every night-light lightbulb carries `"adaptiveLighting": false`, and a new one
+# must too. Without it mqttthing adds an internal colour-temperature
+# characteristic for HomeKit Adaptive Lighting, initialises it to 140 mireds at
+# startup, and publishes the matching hue and saturation to the light's /set
+# topic. On every Homebridge start that (a) resets each night light to cool
+# white and (b) reads to Marshal as a manual command on each one, parking
+# motion automation for the 30-minute override TTL. Found 2026-10-03. Adaptive
+# Lighting cannot be used on these lights in any case: its periodic colour
+# updates also go to /set.
+#
 # `make deploy-config` therefore MERGES accessories (by name) and the codec
 # into the live config rather than replacing it, and writes a timestamped
 # backup first. merge-config.py refuses to run if the repo file grows a
