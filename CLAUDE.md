@@ -21,6 +21,8 @@ tailnet address, key, or secret. RFC1918 LAN addresses are acceptable.
   - `edge/mosquitto/` -- MQTT broker deployment
   - `edge/tsstore/` -- ts-store deployment configs
   - `edge/shelly/` -- Shelly device integration (incl. MQTT collector for sleepy H&T sensors)
+  - `edge/nightlight-motion/` -- Go collector: nightlight `occupancy` (+ illuminance) from Z2M -> ts-store
+  - `edge/presence-sensor/` -- Go collector: dedicated presence sensors (Aqara FP300) from Z2M -> ts-store
   - `edge/synology-snmp/` -- Synology NAS SNMP collector: vendor MIBs + OID -> ts-store field map
 - `devices/` -- Per-device instance configs (thin, reference edge/ configs)
 - `tools/` -- Development and testing utilities
@@ -72,6 +74,17 @@ for a few minutes, and they immediately began fighting over the nightlight —
 the old engine saw the new one's publish on the device `/set` topic and logged
 "manual override engaged", because that topic is its own override_topic. Stop
 and remove the old container by hand after any service rename.
+
+**A rules-only deploy must restart the containers that mount `rules.yaml`.**
+It is a single-file bind mount, and Ansible's `copy` replaces the file (write
+temp, rename), giving it a new inode. A running container keeps the old inode
+and never sees the new rules; `SIGHUP` cannot help, because the path inside
+the container still resolves to the old file. `docker compose up -d` only
+recreates a container whose image or service definition changed, so this
+stayed hidden while every rules change shipped with a version bump. The
+`marshal` role now restarts Marshal -- and sentinel, which mounts the same
+file -- whenever the rules file changed and `up -d` did not recreate it. A
+restart discards Marshal's in-memory hold timers, same as any other deploy.
 
 Its paho MQTT reconnect notes moved with it (`trv-marshal/CLAUDE.md`), and the
 library-level version is in the global `paho-mqtt-go-pitfalls` memory.
@@ -164,10 +177,12 @@ ansible-playbook -i <inventory> playbooks/marshal-deploy.yml
 ansible-playbook -i <inventory> playbooks/dashboard-deploy.yml
 ansible-playbook -i <inventory> playbooks/dashboard-preprod-deploy.yml
 ansible-playbook -i <inventory> playbooks/docker-stats-deploy.yml
+ansible-playbook -i <inventory> playbooks/nightlight-motion-deploy.yml
 ansible-playbook -i <inventory> playbooks/nut-client-deploy.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-deploy.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-setup.yml
 ansible-playbook -i <inventory> playbooks/our-kiosk-setup-minisforum.yml
+ansible-playbook -i <inventory> playbooks/presence-sensor-deploy.yml
 ansible-playbook -i <inventory> playbooks/sentinel-deploy.yml
 ansible-playbook -i <inventory> playbooks/server-report.yml
 ansible-playbook -i <inventory> playbooks/simulators-deploy.yml
@@ -228,6 +243,27 @@ schema stores hold flat typed fields only -- no embedded arrays.
 - **MQTT integration**: Publishes to `zigbee2mqtt/#` on the same Mosquitto broker used by Caseta bridge and Marshal
 - **Channel**: 11
 - **Network key**: Stored in 1Password (not in repo)
+
+### Occupancy vs. presence
+
+Two device classes report "someone is here", under different field names:
+
+| Device | Field | Power | Also reports |
+|---|---|---|---|
+| Third Reality 3RSNL02043Z night light | `occupancy` | mains (router) | `illuminance` |
+| Aqara FP300 (PS-S04D) presence sensor | `presence` (+ `pir_detection`) | battery (end device) | `illuminance`, `temperature`, `humidity`, `battery`, `voltage` |
+
+Anything keyed on one name silently ignores the other, so each consumer is
+told which it is reading: a Marshal rule's `condition.field`, the Homebridge
+codec's `occupancyDetected` (accepts either), and the ts-store collector
+(`edge/nightlight-motion` requires `occupancy`, `edge/presence-sensor`
+requires `presence`, each writing its own store).
+
+**Never query a battery device.** A sleepy end device reports on change and
+on its own heartbeat; a `/get` is queued at its parent until it next wakes
+and costs it a transmission. Every consumer here is a passive subscriber, and
+Z2M `availability` is left off, so nothing pings. Keep it that way: read the
+retained state from the broker instead of asking the device.
 
 ### Vendor private clusters
 

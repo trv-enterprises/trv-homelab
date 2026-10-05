@@ -117,3 +117,24 @@ nightlight_motion_key_note: "nightlight-motion collector (Ansible)"
 #   nightlight_motion_broker    tcp://<broker>:1883
 #   nightlight_motion_devices   [list of Z2M device names]
 #   nightlight_motion_api_key   store key (1Password via op lookup)
+
+# --- presence-sensor collector (tasks/presence-sensor.yml, invoked by
+# playbooks/presence-sensor-deploy.yml) ---
+# Sibling of nightlight-motion, for dedicated presence sensors (written
+# against the Aqara FP300): `presence` rather than `occupancy`, plus
+# temperature, humidity and battery. One tall record per Z2M publish, keyed
+# by a `device` field, so another sensor is a line in the device list, not a
+# new store. Passive -- subscribe only -- so it costs a battery device
+# nothing. The binary lives in THIS repo under edge/presence-sensor.
+presence_sensor_store: presence-sensors
+presence_sensor_bin: /usr/local/bin/presence-sensor
+presence_sensor_src_dir: "{{ playbook_dir }}/../../../edge/presence-sensor"
+presence_sensor_build_dir: "{{ playbook_dir }}/../../../edge/presence-sensor"
+presence_sensor_blocks: 10000
+# Registry grant note -- also the idempotency marker for key adoption; keep
+# stable or the key is re-adopted (harmless duplicate, but noisy).
+presence_sensor_key_note: "presence-sensor collector (Ansible)"
+# Required from the deployment inventory (no defaults):
+#   presence_sensor_broker    tcp://<broker>:1883
+#   presence_sensor_devices   [list of Z2M device names]
+#   presence_sensor_api_key   store key (1Password via op lookup)

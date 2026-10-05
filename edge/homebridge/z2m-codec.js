@@ -6,7 +6,7 @@
  *   - Shelly plugs (state extraction from JSON)
  *   - Soil moisture sensors (moisture, battery)
  *   - Contact sensors / garage door (contact state)
- *   - Occupancy sensors (motion night light)
+ *   - Occupancy sensors (motion night light `occupancy`, Aqara FP300 `presence`)
  */
 
 'use strict';
@@ -185,9 +185,11 @@ function init(params) {
       return payload.contact === false ? 1 : 0; // false = open = detected
     }
 
-    // Occupancy sensor (motion night light)
+    // Occupancy sensor. Motion night lights report `occupancy`; dedicated
+    // presence sensors (Aqara FP300) report `presence`. A device has one or
+    // the other, never both.
     if (prop === 'occupancyDetected') {
-      return payload.occupancy === true ? 1 : 0;
+      return payload.occupancy === true || payload.presence === true ? 1 : 0;
     }
 
     return message;

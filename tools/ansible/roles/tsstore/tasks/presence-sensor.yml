@@ -1,0 +1,204 @@
+---
+# presence-sensor collector deployment.
+#
+# Runs ON the ts-store host and captures dedicated presence sensors' state
+# from MQTT into a local schema store over the unix socket. One tall record
+# per Zigbee2MQTT publish, keyed by a `device` discriminator (same table-shape
+# convention as nightlight-motion / docker-containers / synology-snmp).
+#
+# Sibling of nightlight-motion.yml, and deliberately the same shape. It is a
+# separate collector and store because the device is a different shape: a
+# presence sensor reports `presence` (not `occupancy`) plus temperature,
+# humidity and battery, none of which a mains-powered nightlight has.
+#
+# The collector is passive -- subscribe only, never a /get -- so it costs a
+# battery sensor nothing. Records arrive when the device reports a change.
+#
+# The binary lives in this repo under edge/presence-sensor and is built
+# locally and pushed, like nightlight-motion and synology-snmp.
+#
+# Key handling is REGISTRY-ERA (v0.19+): the key is adopted into the central
+# registry with `tsstore key create --key-file -`. See nightlight-motion.yml
+# for why per-store keys.json seeding is not used.
+#
+# Required vars (from playbooks/presence-sensor-deploy.yml / host_vars):
+#   presence_sensor_broker    MQTT broker URL (tcp://<host>:1883)
+#   presence_sensor_devices   list of Z2M device names to capture
+#   presence_sensor_api_key   store API key (1Password via op lookup)
+
+- name: Validate presence-sensor configuration
+  ansible.builtin.assert:
+    that:
+      - presence_sensor_broker is defined and (presence_sensor_broker | length) > 0
+      - presence_sensor_devices is defined and (presence_sensor_devices | length) > 0
+      - presence_sensor_api_key is defined and (presence_sensor_api_key | length) > 0
+    fail_msg: >-
+      presence-sensor needs presence_sensor_broker, a non-empty
+      presence_sensor_devices list, and presence_sensor_api_key.
+      Add them to host_vars/{{ inventory_hostname }}.yml (see playbook header).
+
+- name: Detect control-node Go toolchain
+  ansible.builtin.command: go version
+  delegate_to: localhost
+  run_once: true
+  register: presence_sensor_go
+  changed_when: false
+  failed_when: presence_sensor_go.rc != 0
+
+- name: Determine target architecture suffix
+  ansible.builtin.set_fact:
+    presence_sensor_arch: "{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+
+# Built from inside edge/presence-sensor: it is its own Go module.
+- name: Build presence-sensor binary locally
+  ansible.builtin.command:
+    cmd: >-
+      go build -ldflags=-w -ldflags=-s
+      -o {{ presence_sensor_build_dir }}/presence-sensor-linux-{{ presence_sensor_arch }} .
+    chdir: "{{ presence_sensor_src_dir }}"
+  environment:
+    GOOS: linux
+    GOARCH: "{{ presence_sensor_arch }}"
+    CGO_ENABLED: "0"
+  delegate_to: localhost
+  run_once: true
+  changed_when: true
+
+- name: Install presence-sensor binary
+  ansible.builtin.copy:
+    src: "{{ presence_sensor_build_dir }}/presence-sensor-linux-{{ presence_sensor_arch }}"
+    dest: "{{ presence_sensor_bin }}"
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+  notify: Restart presence-sensor
+
+# --- Store: create + key + schema, all on this host ---
+
+- name: Check whether the presence-sensor store exists (meta.tsdb present)
+  ansible.builtin.stat:
+    path: "{{ tsstore_data_dir }}/{{ presence_sensor_store }}/meta.tsdb"
+  register: presence_sensor_meta
+  become: true
+
+- name: Create the presence-sensor store
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_bin_dir }}/tsstore create {{ presence_sensor_store }}
+      --path {{ tsstore_data_dir }}
+      --type schema
+      --blocks {{ presence_sensor_blocks }}
+    chdir: "{{ tsstore_data_dir }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  when: not presence_sensor_meta.stat.exists
+  become: true
+  become_user: "{{ tsstore_user }}"
+  changed_when: true
+
+- name: Check whether the collector's key is already registered
+  ansible.builtin.command:
+    cmd: "{{ tsstore_bin_dir }}/tsstore key list {{ presence_sensor_store }}"
+    chdir: "{{ tsstore_data_dir }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  become: true
+  become_user: "{{ tsstore_user }}"
+  register: presence_sensor_key_list
+  changed_when: false
+
+# manage is needed alongside read,write: the schema PUT below authenticates
+# with this key, and schema writes are a `manage` operation.
+- name: Adopt the collector key into the key registry
+  ansible.builtin.command:
+    cmd: >-
+      {{ tsstore_bin_dir }}/tsstore key create --key-file -
+      --grant read,write,manage:{{ presence_sensor_store }}
+      --note "{{ presence_sensor_key_note }}"
+    chdir: "{{ tsstore_data_dir }}"
+    stdin: "{{ presence_sensor_api_key }}"
+  environment:
+    TSSTORE_DATA_PATH: "{{ tsstore_data_dir }}"
+  when: presence_sensor_key_note not in presence_sensor_key_list.stdout
+  become: true
+  become_user: "{{ tsstore_user }}"
+  no_log: true
+  changed_when: true
+
+# Field names are Zigbee2MQTT's own (temperature in degC, humidity in %,
+# voltage in mV). Keep in step with the field lists in
+# edge/presence-sensor/main.go. Applied only at creation: appending a field
+# to an existing store is a manual schema PUT (append is safe; anything else
+# is breaking -- see the ts-store notes in CLAUDE.md).
+- name: Apply the schema to a newly-created store
+  ansible.builtin.uri:
+    url: "http://localhost:{{ tsstore_port }}/api/stores/{{ presence_sensor_store }}/schema"
+    method: PUT
+    headers:
+      X-API-Key: "{{ presence_sensor_api_key }}"
+    body_format: json
+    body:
+      fields:
+        - {index: 1, name: "device", type: "string"}
+        - {index: 2, name: "presence", type: "int32"}
+        - {index: 3, name: "pir_detection", type: "int32"}
+        - {index: 4, name: "illuminance", type: "int64"}
+        - {index: 5, name: "temperature", type: "float32"}
+        - {index: 6, name: "humidity", type: "float32"}
+        - {index: 7, name: "battery", type: "int32"}
+        - {index: 8, name: "voltage", type: "int32"}
+        - {index: 9, name: "linkquality", type: "int32"}
+    status_code: 200
+  when: not presence_sensor_meta.stat.exists
+  become: true
+  no_log: true
+
+# --- Service ---
+
+- name: Create tsstore config dir (for the env file)
+  ansible.builtin.file:
+    path: "{{ tsstore_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+# Key and broker in the env file, never in the unit's ExecStart — argv is
+# world-readable via `ps`.
+- name: Create presence-sensor environment file
+  ansible.builtin.copy:
+    content: |
+      MQTT_BROKER={{ presence_sensor_broker }}
+      PRESENCE_DEVICES={{ presence_sensor_devices | join(',') }}
+      TSSTORE_SOCKET_PATH={{ tsstore_socket }}
+      TSSTORE_STORE={{ presence_sensor_store }}
+      TSSTORE_API_KEY={{ presence_sensor_api_key }}
+    dest: "{{ tsstore_config_dir }}/presence-sensor.env"
+    owner: root
+    group: "{{ tsstore_group }}"
+    mode: '0640'
+  become: true
+  no_log: true
+  notify: Restart presence-sensor
+
+- name: Create presence-sensor systemd service
+  ansible.builtin.template:
+    src: presence-sensor.service.j2
+    dest: /etc/systemd/system/presence-sensor.service
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify:
+    - Reload systemd
+    - Restart presence-sensor
+
+- name: Enable and start presence-sensor
+  ansible.builtin.systemd:
+    name: presence-sensor
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

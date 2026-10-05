@@ -361,6 +361,18 @@
         },
         {
             "accessory": "mqttthing",
+            "type": "occupancySensor",
+            "name": "Aqara Presence",
+            "url": "mqtt://localhost:1883",
+            "integerValue": true,
+            "topics": {
+                "getOccupancyDetected": "zigbee2mqtt/aquara-sensor",
+                "getStatusLowBattery": "zigbee2mqtt/aquara-sensor"
+            },
+            "codec": "z2m-codec.js"
+        },
+        {
+            "accessory": "mqttthing",
             "type": "switch",
             "name": "Nightlight Auto",
             "url": "mqtt://localhost:1883",
