@@ -19,8 +19,13 @@
 #   - tsstore_collectors (list of Go collectors to deploy)
 #   - tsstore_mqtt_streams (optional push connections)
 
+# The default target is the `tsstore` inventory group. A host that needs a
+# different login for this play (one where the normal SSH user has no
+# passwordless sudo) can live in its own group and be deployed with
+# -e tsstore_hosts=<group> -e ansible_user=<login>, leaving the main group's
+# plain run untouched.
 - name: Deploy tsstore
-  hosts: tsstore
+  hosts: "{{ tsstore_hosts | default('tsstore') }}"
   become: false
 
   roles:

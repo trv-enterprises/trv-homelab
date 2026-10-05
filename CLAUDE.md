@@ -212,6 +212,17 @@ Several collectors here write to ts-store. Two constraints bite repeatedly:
 - **Stores are not auto-created.** ts-store does not create a store on first
   write -- the write fails on the missing meta file. The `tsstore` role creates
   each store explicitly and applies its schema before the collector starts.
+- **A store's key must be in the key registry before anything uses it.** From
+  ts-store v0.19 keys live in a central registry; a per-store `keys.json` is
+  only *imported* when the server starts (every start, for any hash it does
+  not already hold -- verified on v0.22.0). The `tsstore` role therefore
+  creates a store with its key on stdin (`tsstore create ... --key-file -`,
+  v0.20+), which registers it at once with read, write and manage on that
+  store; the running server re-reads the registry live. Seeding `keys.json`
+  after creation and then calling the API fails with 401 until a restart --
+  which is how the role was unable to bring up a brand-new host until
+  2026-10-05, unnoticed because every existing host's stores predate the
+  registry. Keys must be `tsstore_` followed by at least 36 characters.
 - **Schema stores project every record through the *current* schema, by field
   index.** There is one active schema and no per-record versioning. Appending a
   field is safe (older records simply lack the key). Dropping one is
@@ -221,6 +232,12 @@ Several collectors here write to ts-store. Two constraints bite repeatedly:
 
 Collector store specs live in the `tsstore` role's `vars/main.yml`, overridable
 per host from the deployment inventory.
+
+`playbooks/tsstore-deploy.yml` targets the `tsstore` inventory group by
+default and takes `-e tsstore_hosts=<group>` for anything else. The role needs
+root; a host whose normal SSH user has no passwordless sudo goes in its own
+group and is deployed with `-e ansible_user=<login>` for that play, rather
+than changing its inventory login for every other playbook.
 
 `edge/synology-snmp/oid-map.yml` is the OID -> field map for the NAS collector.
 Its header documents the provenance rules (vendor MIB vs. 2025 MIB Guide vs.

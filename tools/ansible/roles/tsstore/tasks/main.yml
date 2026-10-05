@@ -9,7 +9,8 @@
 #   5. Write tsstore env file (admin key)
 #   6. Install systemd unit + tmpfiles config
 #   7. Start tsstore
-#   8. Pre-create per-store data dirs with keys.json (key preservation)
+#   8. Create missing stores, adopting each store's key into the key registry
+#      at creation; seed keys.json too (legacy path, kept for existing stores)
 #   9. Render mqtt_connections.json into per-store dirs
 #  10. Deploy collectors (binary download + systemd unit + start)
 
@@ -167,8 +168,20 @@
 # meta.tsdb: no such file or directory"), and a schema-type store further
 # rejects writes until its schema is registered. So we explicitly create
 # each collector's store here (when missing); the schema is applied a few
-# tasks below, AFTER keys.json is reseeded with the vault key (the schema
-# endpoint authenticates with the store's own API key, not the admin key).
+# tasks below (the schema endpoint authenticates with the store's own API
+# key, not the admin key).
+#
+# The store's key is handed to `tsstore create` on stdin (--key-file -, ts-store
+# v0.20+), which adopts it into the central key registry with read,write,manage
+# on that store. The running server re-reads the registry live, so the key
+# works for the schema PUT below with no restart.
+#
+# This replaced relying on the seeded keys.json alone. From v0.19 keys live in
+# the registry, and a keys.json is only imported when the server STARTS. On a
+# brand-new host the server is already up when the store is created, so the
+# seeded key was unknown and the schema PUT got 401 -- the role could not bring
+# up a fresh host (reproduced on v0.22.0, 2026-10-05). It went unnoticed
+# because every existing host's stores predate the registry.
 #
 # Idempotent: keyed on the presence of meta.tsdb, so existing stores
 # (including manually-created ones on trv-srv-001 / trv-pi-001) are left
@@ -209,6 +222,10 @@
       --path {{ tsstore_data_dir }}
       --type {{ (tsstore_effective_store_specs[item.item.name] | default({})).type | default('json') }}
       --blocks {{ (tsstore_effective_store_specs[item.item.name] | default({})).blocks | default(1024) }}
+      {{ '--key-file -' if item.item.name in tsstore_store_api_keys else '' }}
+    # The key travels on stdin, never argv (world-readable via `ps`).
+    stdin: "{{ tsstore_store_api_keys[item.item.name] | default(omit) }}"
+    stdin_add_newline: false
     # tsstore reads an optional config.json from cwd; run from a dir the
     # service user can read to avoid a "permission denied" on config.json.
     chdir: "{{ tsstore_data_dir }}"
@@ -222,10 +239,13 @@
   become_user: "{{ tsstore_user }}"
   register: tsstore_created
   changed_when: true
+  no_log: true
 
-# Per-store API key preservation. The role seeds keys.json with the
-# SHA-256 of the vault-managed key so the collector can authenticate from
-# the moment it starts, and the same key survives across re-deploys.
+# Per-store keys.json (legacy path). The role seeds keys.json with the
+# SHA-256 of the managed key. For a store created above this is now
+# redundant -- its key is already in the registry -- but the file is what a
+# pre-registry server reads, it is how the stores that predate the registry
+# were keyed, and ts-store imports any hash it does not yet hold at startup.
 - name: Pre-create per-store data directories
   ansible.builtin.file:
     path: "{{ tsstore_data_dir }}/{{ item.key }}"
@@ -309,12 +329,11 @@
   no_log: true
   notify: Restart tsstore
 
-# Apply the schema to stores we just created this run. Runs AFTER keys.json
-# is reseeded with the vault key, because the schema endpoint authenticates
-# with the store's API key (the admin key is rejected, 401). ts-store reads
-# keys.json per request, so the deferred "Restart tsstore" handler need not
-# have fired yet. Skipped for pre-existing stores (schema is immutable once
-# set) and for stores whose spec has no `schema` block (json/text/binary).
+# Apply the schema to stores we just created this run. The schema endpoint
+# authenticates with the store's API key (the admin key is rejected), which
+# the create task above adopted into the registry -- no restart needed.
+# Skipped for pre-existing stores (schema is immutable once set) and for
+# stores whose spec has no `schema` block (json/text/binary).
 - name: Apply schema to newly-created schema-type stores
   ansible.builtin.uri:
     url: "http://localhost:{{ tsstore_port }}/api/stores/{{ item.item.name }}/schema"
