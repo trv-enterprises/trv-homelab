@@ -8,10 +8,9 @@
 # deploy pulls a tag the release never pushed.
 marshal_image: ghcr.io/trv-enterprises/marshal
 
-# Overridden per deploy: make deploy-marshal MARSHAL_VERSION=x.y.z
-# Pin an explicit tag for anything that must be reproducible or rolled back --
-# `latest` cannot be rolled back to a known-good build.
-marshal_version: latest
+# marshal_version is deliberately NOT here: role vars outrank the inventory,
+# so a value in this file silently defeats a host_vars pin. It lives in
+# defaults/main.yml.
 
 # Deployment directory (shared services stack)
 services_deploy_dir: /opt/services

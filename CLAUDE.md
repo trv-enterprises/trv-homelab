@@ -194,6 +194,13 @@ ansible-playbook -i <inventory> playbooks/weather-poller-deploy.yml
 Roles: `marshal`, `dashboard`, `nut-client`, `sentinel`, `server-report`,
 `services-stack`, `simulators`, `tsstore`, `voice-display`, `weather-poller`.
 
+**A value the deployment must be able to pin goes in a role's `defaults/`,
+never its `vars/`.** Role vars outrank inventory host_vars, so an image tag in
+`vars/main.yml` silently defeats a pin: the deploy renders `latest` and says
+nothing. `marshal_version` sat in `vars/` until 2026-10-05 for exactly this
+effect. Keep `vars/` for values that are fixed facts of the role (image name,
+deploy directory).
+
 `services-stack` owns the shared `docker-compose.yml` for the services LXC.
 Every services-LXC playbook depends on it, and individual service roles must not
 ship their own copy of that compose file.

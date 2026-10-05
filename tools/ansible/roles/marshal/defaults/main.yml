@@ -1,4 +1,10 @@
 ---
+# Image tag. A default, so the deployment inventory can pin it (host_vars) and
+# `make deploy-marshal MARSHAL_VERSION=x.y.z` can override either.
+# Pin an explicit tag for anything that must be reproducible or rolled back --
+# `latest` cannot be rolled back to a known-good build.
+marshal_version: latest
+
 # Third Reality on-device rule configuration, applied via the Z2M bridge.
 # Override per deployment in host_vars. Empty by default so the role is a
 # no-op for deployments with no such devices.
