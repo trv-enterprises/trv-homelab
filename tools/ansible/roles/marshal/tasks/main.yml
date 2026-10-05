@@ -31,6 +31,46 @@
   register: compose_up
   changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
 
+# rules.yaml is a SINGLE-FILE bind mount, and the copy above replaces the file
+# (write temp, rename), so it has a new inode. A container that is already
+# running keeps the old one and never sees the new rules. SIGHUP cannot help:
+# the path inside the container still resolves to the old file. Only starting
+# the container again re-resolves the mount.
+#
+# `up -d` does that on its own when the image or the service definition
+# changed, which is why this went unnoticed while every rules change shipped
+# with a version bump. A rules-only deploy needs the explicit restart.
+- name: Restart marshal to load changed rules
+  ansible.builtin.command:
+    cmd: docker compose restart marshal
+    chdir: "{{ services_deploy_dir }}"
+  when:
+    - rules_file_result.changed
+    - "'Started' not in compose_up.stderr"
+    - "'Recreated' not in compose_up.stderr"
+  changed_when: true
+
+# sentinel mounts the same file read-only (rule list, repeat windows) and is
+# stale for the same reason. It is optional in this stack, so only restart it
+# where it is running.
+- name: Check whether sentinel is running
+  ansible.builtin.command:
+    cmd: docker compose ps --status running -q sentinel
+    chdir: "{{ services_deploy_dir }}"
+  register: sentinel_running
+  when: rules_file_result.changed
+  changed_when: false
+  failed_when: false
+
+- name: Restart sentinel to load changed rules
+  ansible.builtin.command:
+    cmd: docker compose restart sentinel
+    chdir: "{{ services_deploy_dir }}"
+  when:
+    - rules_file_result.changed
+    - (sentinel_running.stdout | default('') | trim | length) > 0
+  changed_when: true
+
 - name: Wait for marshal to start
   ansible.builtin.command:
     cmd: docker compose ps marshal --format json
