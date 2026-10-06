@@ -366,8 +366,8 @@
             "url": "mqtt://localhost:1883",
             "integerValue": true,
             "topics": {
-                "getOccupancyDetected": "zigbee2mqtt/aquara-sensor",
-                "getStatusLowBattery": "zigbee2mqtt/aquara-sensor"
+                "getOccupancyDetected": "zigbee2mqtt/aqara-sensor",
+                "getStatusLowBattery": "zigbee2mqtt/aqara-sensor"
             },
             "codec": "z2m-codec.js"
         },
