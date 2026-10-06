@@ -201,6 +201,17 @@ nothing. `marshal_version` sat in `vars/` until 2026-10-05 for exactly this
 effect. Keep `vars/` for values that are fixed facts of the role (image name,
 deploy directory).
 
+**CPU priority in the services stack is done with `cpu_shares`, not `nice`.**
+mosquitto, zigbee2mqtt and marshal carry a raised share in the compose
+template (`services_pipeline_cpu_shares`, default 2048), because one motion
+event crosses all three. It is a weight: free when the CPU is idle, decisive
+only under contention. `nice` cannot rank containers against each other --
+each is its own cgroup and nice only orders processes inside one; the same
+holds between LXCs, where the Proxmox equivalent is `cpuunits`. The weight a
+share value becomes depends on the runc version, so read it back
+(`cat /sys/fs/cgroup/cpu.weight` in the container) rather than trusting the
+number. Changing it recreates the three containers, the broker included.
+
 `services-stack` owns the shared `docker-compose.yml` for the services LXC.
 Every services-LXC playbook depends on it, and individual service roles must not
 ship their own copy of that compose file.

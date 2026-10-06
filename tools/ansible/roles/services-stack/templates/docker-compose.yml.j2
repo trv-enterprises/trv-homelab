@@ -2,6 +2,21 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     restart: unless-stopped
+    # CPU share for the sensor pipeline. A motion event crosses three services
+    # (zigbee2mqtt -> mosquitto -> marshal -> mosquitto -> zigbee2mqtt), so all
+    # three carry the same raised share; raising the broker alone would protect
+    # one hop of three.
+    #
+    # It is a WEIGHT, not a reservation or a cap: it costs nothing while the
+    # CPU is free and only decides who goes first under contention. `nice`
+    # cannot do this job -- each container is its own cgroup, and nice only
+    # orders processes inside one.
+    #
+    # Default is 1024. What weight a value becomes depends on the runc
+    # version (the formula changed), so check the result rather than trust
+    # the number: `cat /sys/fs/cgroup/cpu.weight` in the container. On runc
+    # 1.3.3, 2048 gives 174 against a default of 100.
+    cpu_shares: {{ services_pipeline_cpu_shares | default(2048) }}
     volumes:
       # Config is bind-mounted from the deploy dir so it's the single
       # source of truth (managed by the services-stack Ansible role).
@@ -19,6 +34,7 @@ services:
   zigbee2mqtt:
     image: koenkk/zigbee2mqtt
     restart: unless-stopped
+    cpu_shares: {{ services_pipeline_cpu_shares | default(2048) }}  # see mosquitto
     volumes:
       - zigbee2mqtt_data:/app/data
     ports:
@@ -56,6 +72,7 @@ services:
   marshal:
     image: ghcr.io/trv-enterprises/marshal:{{ marshal_version | default("latest") }}
     restart: unless-stopped
+    cpu_shares: {{ services_pipeline_cpu_shares | default(2048) }}  # see mosquitto
     volumes:
       - ./rules.yaml:/etc/marshal/rules.yaml:ro
     environment:
