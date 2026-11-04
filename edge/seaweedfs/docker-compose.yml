@@ -1,0 +1,49 @@
+# SeaweedFS: single-node S3-compatible object store for development and
+# driver tests. One `weed mini` process runs master, volume, filer and the
+# S3 gateway; only the S3 port is published.
+#
+# Every ${...} value comes from the deployment (an --env-file, or rendered
+# by the deploy overlay before the file reaches a host whose compose UI
+# cannot read a .env). See CLAUDE.md beside this file.
+#
+#   SEAWEEDFS_VERSION    image tag, pinned (never `latest`)
+#   SEAWEEDFS_UID/GID    host user that owns the data dir and the config
+#   SEAWEEDFS_DATA_DIR   host path for volumes + filer metadata
+#   SEAWEEDFS_BUCKETS    comma-separated buckets created at start if absent
+#   SEAWEEDFS_S3_PORT    host port for the S3 API
+#   SEAWEEDFS_MEM_LIMIT  container memory cap, e.g. 1536m
+
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:${SEAWEEDFS_VERSION}
+    container_name: seaweedfs
+    restart: unless-stopped
+    # Run as the owner of the bind mounts. The image's entrypoint only
+    # chowns /data and drops to its own `seaweed` user when started as root;
+    # as a non-root user it execs weed directly, so the config can stay
+    # mode 0600 on the host.
+    user: "${SEAWEEDFS_UID}:${SEAWEEDFS_GID}"
+    command:
+      - mini
+      - -dir=/data
+      # Identities are read once, at start: a config change needs a restart.
+      - -s3.config=/etc/seaweedfs-s3/s3.json
+      - -bucket=${SEAWEEDFS_BUCKETS}
+      - -master.defaultReplication=000
+      # mini turns these on by default; neither is published, but neither
+      # is wanted either.
+      - -webdav=false
+      - -admin.ui=false
+    ports:
+      - "${SEAWEEDFS_S3_PORT}:8333"
+    volumes:
+      - ${SEAWEEDFS_DATA_DIR}:/data
+      # A directory, not a single-file mount: replacing the file gives it a
+      # new inode, which a file bind mount would never see.
+      - ./config:/etc/seaweedfs-s3:ro
+    mem_limit: ${SEAWEEDFS_MEM_LIMIT}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

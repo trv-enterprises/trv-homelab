@@ -24,6 +24,7 @@ tailnet address, key, or secret. RFC1918 LAN addresses are acceptable.
   - `edge/nightlight-motion/` -- Go collector: nightlight `occupancy` (+ illuminance) from Z2M -> ts-store
   - `edge/presence-sensor/` -- Go collector: dedicated presence sensors (Aqara FP300) from Z2M -> ts-store
   - `edge/synology-snmp/` -- Synology NAS SNMP collector: vendor MIBs + OID -> ts-store field map
+  - `edge/seaweedfs/` -- Single-node S3-compatible store (SeaweedFS) for dev/driver tests; compose + identity verifier
 - `devices/` -- Per-device instance configs (thin, reference edge/ configs)
 - `tools/` -- Development and testing utilities
   - `tools/ansible/` -- Ansible playbooks and roles for deployment
