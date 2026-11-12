@@ -1,0 +1,104 @@
+---
+# Rosa review stack deployment.
+
+- name: Determine whether rosa_version is pinned
+  ansible.builtin.set_fact:
+    rosa_version_pinned: "{{ (rosa_version | default('') | length) > 0 }}"
+
+- name: Resolve latest rosa release (only when version not pinned)
+  ansible.builtin.command:
+    cmd: gh release view --repo {{ rosa_repo }} --json tagName --jq .tagName
+  delegate_to: localhost
+  run_once: true
+  check_mode: false
+  register: rosa_latest_lookup
+  changed_when: false
+  failed_when: >-
+    rosa_latest_lookup.rc != 0 or
+    (rosa_latest_lookup.stdout | default('') | trim | length) == 0
+  when: not rosa_version_pinned
+
+- name: Set rosa_version from the resolved release
+  ansible.builtin.set_fact:
+    rosa_version: "{{ rosa_latest_lookup.stdout | trim | regex_replace('^v', '') }}"
+  when: not rosa_version_pinned
+
+- name: Show the version being deployed
+  ansible.builtin.debug:
+    msg: "Deploying rosa {{ rosa_version }} ({{ 'pinned' if rosa_version_pinned else 'resolved as latest release' }})"
+
+- name: Validate secrets
+  ansible.builtin.fail:
+    msg: "{{ item }} is required (host_vars reads it from 1Password via op-read.sh)."
+  when: lookup('vars', item, default='') | length == 0
+  loop: [rosa_db_password, rosa_cron_token, ghcr_token]
+  no_log: true
+
+- name: Create deployment directory
+  ansible.builtin.file:
+    path: "{{ rosa_deploy_dir }}"
+    state: directory
+    owner: "{{ ansible_user | default(lookup('env', 'USER')) }}"
+    mode: '0750'
+  become: true
+
+- name: Login to GitHub Container Registry
+  ansible.builtin.shell:
+    cmd: echo "{{ ghcr_token }}" | docker login ghcr.io -u trv-enterprises --password-stdin
+  changed_when: false
+  no_log: true
+
+- name: Write secrets env file
+  ansible.builtin.copy:
+    dest: "{{ rosa_deploy_dir }}/.env"
+    mode: '0600'
+    content: |
+      ROSA_DB_PASSWORD={{ rosa_db_password }}
+      ROSA_CRON_TOKEN={{ rosa_cron_token }}
+  no_log: true
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ rosa_deploy_dir }}/docker-compose.yml"
+    mode: '0644'
+
+- name: Pull images
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ rosa_deploy_dir }}"
+  register: pull_result
+  changed_when: "'Pulled' in pull_result.stderr or 'Downloaded' in pull_result.stderr"
+
+- name: Start/update services
+  ansible.builtin.command:
+    cmd: docker compose up -d --remove-orphans
+    chdir: "{{ rosa_deploy_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Wait for services to be healthy
+  ansible.builtin.command:
+    cmd: docker compose ps --format json
+    chdir: "{{ rosa_deploy_dir }}"
+  register: compose_ps
+  until: "'unhealthy' not in compose_ps.stdout and 'starting' not in compose_ps.stdout"
+  retries: 12
+  delay: 10
+  changed_when: false
+
+- name: Check the app reports healthy at the deployed version
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ rosa_port }}/api/health"
+    return_content: true
+  register: rosa_health
+  until: rosa_health.json is defined and rosa_health.json.status == 'ok'
+  retries: 6
+  delay: 5
+  failed_when: rosa_health.json is not defined or rosa_health.json.status != 'ok' or rosa_health.json.version != rosa_version
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: |
+      Rosa {{ rosa_health.json.version }} deployed (database {{ rosa_health.json.database }}, schema {{ rosa_health.json.schema }}).
+      LAN: http://{{ lan_ip | default(ansible_host) }}:{{ rosa_port }}/  Public: https://rosa.tomviviano.com/

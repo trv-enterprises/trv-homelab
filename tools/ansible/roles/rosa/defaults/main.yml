@@ -1,0 +1,19 @@
+---
+# Rosa role defaults. Low precedence on purpose: host_vars override them.
+#
+# Review stack for the Rosa Remodeling job-costing app (trv-enterprises/rosa-rick):
+# the app image, MariaDB 10.11, a cron caller and a nightly backup, under docker compose.
+
+# Empty = deploy the latest GitHub release; a value (e.g. "0.1.0", no "v") pins it.
+rosa_version: ""
+
+rosa_repo: trv-enterprises/rosa-rick
+rosa_image: ghcr.io/trv-enterprises/rosa
+rosa_deploy_dir: /opt/rosa
+
+# Host port for the app. The Cloudflare tunnel (services LXC) points at http://<lan_ip>:<rosa_port>.
+rosa_port: 3000
+
+# Secrets — set in host_vars from 1Password (op-read.sh). Required.
+# rosa_db_password: ""
+# rosa_cron_token: ""

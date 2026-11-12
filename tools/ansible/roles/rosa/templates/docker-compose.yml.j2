@@ -1,0 +1,53 @@
+# Managed by Ansible (trv-homelab role "rosa"). Do not edit on the host.
+# Source of truth for the stack's shape: deploy/compose.review.yaml in trv-enterprises/rosa-rick.
+name: rosa
+services:
+  app:
+    image: {{ rosa_image }}:{{ rosa_version }}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: mysql://rosa:${ROSA_DB_PASSWORD:?}@db:3306/rosa
+      CRON_TOKEN: ${ROSA_CRON_TOKEN:?}
+    ports: ["{{ rosa_port }}:3000"]
+    volumes: [uploads:/data/uploads]
+    depends_on:
+      db: { condition: service_healthy }
+
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: rosa
+      MARIADB_USER: rosa
+      MARIADB_PASSWORD: ${ROSA_DB_PASSWORD:?}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    volumes: [db:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Stands in for cPanel cron: calls the app's cron endpoint every 15 minutes.
+  cron:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    environment:
+      CRON_TOKEN: ${ROSA_CRON_TOKEN:?}
+    entrypoint: ["/bin/sh", "-c", "while true; do sleep 900; curl -fsS -X POST -H \"Authorization: Bearer $$CRON_TOKEN\" http://app:3000/api/cron/run >/dev/null || echo cron call failed; done"]
+    depends_on: [app]
+
+  # Nightly logical backup into the backups volume, keeping 14 days.
+  backup:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_PASSWORD: ${ROSA_DB_PASSWORD:?}
+    entrypoint: ["/bin/sh", "-c", "while true; do sleep 86400; mariadb-dump -h db -u rosa -p\"$$MARIADB_PASSWORD\" --single-transaction rosa | gzip > /backups/rosa-$$(date +%F).sql.gz; find /backups -name 'rosa-*.sql.gz' -mtime +14 -exec rm {} +; done"]
+    volumes: [backups:/backups]
+    depends_on: [db]
+
+volumes:
+  db:
+  uploads:
+  backups:

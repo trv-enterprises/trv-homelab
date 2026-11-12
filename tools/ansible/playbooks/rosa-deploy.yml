@@ -1,0 +1,16 @@
+---
+# Rosa Deployment Playbook
+#
+# Deploys the Rosa Remodeling job-costing review stack (trv-enterprises/rosa-rick)
+# to the `rosa` LXC (106) on trv-srv-002. Public at https://rosa.tomviviano.com
+# through the Cloudflare tunnel on the services LXC.
+#
+# Deploy latest release:      make deploy-rosa
+# Deploy a specific version:  make deploy-rosa ROSA_VERSION=0.1.0
+
+- name: Deploy Rosa
+  hosts: rosa
+  become: false
+
+  roles:
+    - rosa
