@@ -17,3 +17,5 @@ rosa_port: 3000
 # Secrets — set in host_vars from 1Password (op-read.sh). Required.
 # rosa_db_password: ""
 # rosa_cron_token: ""
+# Optional: lets the first Owner account be created. Leave it set; it does nothing once an Owner exists.
+# rosa_setup_token: ""

@@ -8,6 +8,8 @@ services:
     environment:
       DATABASE_URL: mysql://rosa:${ROSA_DB_PASSWORD:?}@db:3306/rosa
       CRON_TOKEN: ${ROSA_CRON_TOKEN:?}
+      # Lets the first Owner account be created on the sign-in page; harmless once an Owner exists.
+      SETUP_TOKEN: ${ROSA_SETUP_TOKEN:-}
     ports: ["{{ rosa_port }}:3000"]
     volumes: [uploads:/data/uploads]
     depends_on:

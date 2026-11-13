@@ -55,6 +55,7 @@
     content: |
       ROSA_DB_PASSWORD={{ rosa_db_password }}
       ROSA_CRON_TOKEN={{ rosa_cron_token }}
+      ROSA_SETUP_TOKEN={{ rosa_setup_token | default('') }}
   no_log: true
 
 - name: Deploy docker-compose.yml
