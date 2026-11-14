@@ -39,14 +39,14 @@ services:
     entrypoint: ["/bin/sh", "-c", "while true; do sleep 900; curl -fsS -X POST -H \"Authorization: Bearer $$CRON_TOKEN\" http://app:3000/api/cron/run >/dev/null || echo cron call failed; done"]
     depends_on: [app]
 
-  # Nightly logical backup into the backups volume, keeping 14 days.
+  # Nightly backup into the backups volume, keeping 14 days: the database dump and the uploaded files (receipts, logo).
   backup:
     image: mariadb:10.11
     restart: unless-stopped
     environment:
       MARIADB_PASSWORD: ${ROSA_DB_PASSWORD:?}
-    entrypoint: ["/bin/sh", "-c", "while true; do sleep 86400; mariadb-dump -h db -u rosa -p\"$$MARIADB_PASSWORD\" --single-transaction rosa | gzip > /backups/rosa-$$(date +%F).sql.gz; find /backups -name 'rosa-*.sql.gz' -mtime +14 -exec rm {} +; done"]
-    volumes: [backups:/backups]
+    entrypoint: ["/bin/sh", "-c", "while true; do sleep 86400; mariadb-dump -h db -u rosa -p\"$$MARIADB_PASSWORD\" --single-transaction rosa | gzip > /backups/rosa-$$(date +%F).sql.gz; tar -czf /backups/rosa-uploads-$$(date +%F).tgz -C /uploads .; find /backups -name 'rosa-*' -mtime +14 -exec rm {} +; done"]
+    volumes: [backups:/backups, uploads:/uploads:ro]
     depends_on: [db]
 
 volumes:
